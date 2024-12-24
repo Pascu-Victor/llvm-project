@@ -290,6 +290,37 @@ public:
   }
 };
 
+// WOS Target
+template <typename Target>
+class LLVM_LIBRARY_VISIBILITY WOSTargetInfo : public OSTargetInfo<Target> {
+protected:
+  void getOSDefines(const LangOptions &Opts, const llvm::Triple &Triple,
+                    MacroBuilder &Builder) const override {
+    // WOS defines; list based off of gcc output
+    Builder.defineMacro("__WOS__");
+    DefineStd(Builder, "unix", Opts);
+    if (this->HasFloat128)
+      Builder.defineMacro("__FLOAT128__");
+  }
+
+public:
+  WOSTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
+      : OSTargetInfo<Target>(Triple, Opts) {
+    this->SizeType = TargetInfo::UnsignedLong;
+    this->IntPtrType = TargetInfo::SignedLong;
+    this->PtrDiffType = TargetInfo::SignedLong;
+    this->ProcessIDType = TargetInfo::SignedLong;
+    switch (Triple.getArch()) {
+    default:
+      break;
+    case llvm::Triple::x86:
+    case llvm::Triple::x86_64:
+      this->HasFloat128 = true;
+      break;
+    }
+  }
+};
+
 // Hurd target
 template <typename Target>
 class LLVM_LIBRARY_VISIBILITY HurdTargetInfo : public OSTargetInfo<Target> {
@@ -307,6 +338,7 @@ protected:
     if (Opts.CPlusPlus)
       Builder.defineMacro("_GNU_SOURCE");
   }
+
 public:
   using OSTargetInfo<Target>::OSTargetInfo;
 };
@@ -332,7 +364,7 @@ protected:
         Builder.defineMacro("__ANDROID_API__", "__ANDROID_MIN_SDK_VERSION__");
       }
     } else {
-        Builder.defineMacro("__gnu_linux__");
+      Builder.defineMacro("__gnu_linux__");
     }
     if (Opts.POSIXThreads)
       Builder.defineMacro("_REENTRANT");
@@ -642,8 +674,7 @@ public:
 };
 
 // AIX Target
-template <typename Target>
-class AIXTargetInfo : public OSTargetInfo<Target> {
+template <typename Target> class AIXTargetInfo : public OSTargetInfo<Target> {
 protected:
   void getOSDefines(const LangOptions &Opts, const llvm::Triple &Triple,
                     MacroBuilder &Builder) const override {
