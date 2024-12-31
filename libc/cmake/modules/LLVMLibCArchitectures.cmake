@@ -183,6 +183,8 @@ elseif(LIBC_TARGET_OS STREQUAL "windows")
   set(LIBC_TARGET_OS_IS_WINDOWS TRUE)
 elseif(LIBC_TARGET_OS STREQUAL "gpu")
   set(LIBC_TARGET_OS_IS_GPU TRUE)
+elseif(LIBC_TARGET_OS STREQUAL "wos")
+  set(LIBC_TARGET_OS_IS_WOS TRUE)
 else()
   message(FATAL_ERROR
           "Unsupported libc target operating system ${LIBC_TARGET_OS}")

@@ -88,7 +88,7 @@ function(_get_common_compile_options output_var flags)
         list(APPEND compile_options "-nostdinc")
       endif()
       # TODO: We should set this unconditionally on Linux.
-      if(LIBC_TARGET_OS_IS_LINUX AND
+      if((LIBC_TARGET_OS_IS_LINUX OR LIBC_TARGET_OS_IS_WOS) AND
          (LIBC_CC_SUPPORTS_NOSTDLIBINC OR COMPILER_RESOURCE_DIR))
         # We use -idirafter to avoid preempting libc's own headers in case the
         # directory (e.g. /usr/include) contains other headers.
@@ -236,6 +236,6 @@ function(_get_hermetic_test_compile_options output_var flags)
   if(LLVM_LIBC_FULL_BUILD)
     list(APPEND compile_options "-DLIBC_FULL_BUILD")
   endif()
-  
+
   set(${output_var} ${compile_options} PARENT_SCOPE)
 endfunction()

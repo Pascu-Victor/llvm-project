@@ -62,7 +62,7 @@ add_entrypoint_object(
   HDRS
     getenv.h
   DEPENDS
-    libc.config.linux.app_h
+    libc.config.wos.app_h
 )
 
 add_entrypoint_object(
@@ -462,7 +462,7 @@ add_entrypoint_object(
     libc.src.__support.OSUtil.osutil
 )
 
-# TODO: Move all exit functions to linux specific 
+# TODO: Move all exit functions to linux specific
 
 if(TARGET libc.src.__support.threads.mutex)
 add_header_library(
@@ -486,7 +486,7 @@ add_entrypoint_object(
   HDRS
     atexit.h
   CXX_STANDARD
-    20 # For constinit 
+    20 # For constinit
   DEPENDS
     .exit_handler
 )
@@ -498,7 +498,7 @@ add_entrypoint_object(
   HDRS
     at_quick_exit.h
   CXX_STANDARD
-    20 # For constinit 
+    20 # For constinit
   DEPENDS
     .exit_handler
     .atexit
