@@ -853,6 +853,7 @@ static Triple::OSType parseOS(StringRef OSName) {
       .StartsWith("dragonfly", Triple::DragonFly)
       .StartsWith("freebsd", Triple::FreeBSD)
       .StartsWith("fuchsia", Triple::Fuchsia)
+      .StartsWith("wos", Triple::WOS)
       .StartsWith("ios", Triple::IOS)
       .StartsWith("kfreebsd", Triple::KFreeBSD)
       .StartsWith("linux", Triple::Linux)

@@ -20,7 +20,7 @@ add_startup_object(
   SRC
     start.cpp
   DEPENDS
-    libc.config.app_h
+    libc.config.linux.app_h
     libc.src.__support.macros.attributes
   COMPILE_OPTIONS
     -fno-stack-protector

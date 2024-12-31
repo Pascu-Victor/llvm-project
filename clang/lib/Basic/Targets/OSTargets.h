@@ -298,6 +298,7 @@ protected:
                     MacroBuilder &Builder) const override {
     // WOS defines; list based off of gcc output
     Builder.defineMacro("__WOS__");
+    Builder.defineMacro("__ELF__");
     DefineStd(Builder, "unix", Opts);
     if (this->HasFloat128)
       Builder.defineMacro("__FLOAT128__");

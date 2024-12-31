@@ -29,4 +29,8 @@
 #define LIBC_TARGET_OS_IS_FUCHSIA
 #endif
 
+#if defined(__wos__)
+#define LIBC_TARGET_OS_IS_WOS
+#endif
+
 #endif // LLVM_LIBC_SRC___SUPPORT_MACROS_PROPERTIES_OS_H
