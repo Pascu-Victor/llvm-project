@@ -304,6 +304,7 @@ bool InitHeaderSearch::ShouldAddDefaultIncludePaths(
   case llvm::Triple::UEFI:
   case llvm::Triple::WASI:
   case llvm::Triple::ZOS:
+  case llvm::Triple::WOS:
     return false;
 
   case llvm::Triple::Win32:
