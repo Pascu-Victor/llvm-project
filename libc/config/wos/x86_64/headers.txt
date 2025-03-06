@@ -3,8 +3,8 @@ set(TARGET_PUBLIC_HEADERS
     # libc.include.ctype
     # libc.include.dirent
     # libc.include.dlfcn
-    # libc.include.errno
-    # libc.include.fcntl
+    libc.include.errno
+    libc.include.fcntl
     # libc.include.features
     # libc.include.fenv
     # libc.include.float
@@ -21,14 +21,14 @@ set(TARGET_PUBLIC_HEADERS
     # libc.include.stdbit
     # libc.include.stdfix
     # libc.include.stdio
-    # libc.include.stdlib
+    libc.include.stdlib
     # libc.include.string
     # libc.include.strings
     # libc.include.search
     # libc.include.termios
     # libc.include.threads
     # libc.include.time
-    # libc.include.unistd
+    libc.include.unistd
     # libc.include.wchar
     # libc.include.uchar
 
@@ -46,7 +46,7 @@ set(TARGET_PUBLIC_HEADERS
     # libc.include.sys_socket
     # libc.include.sys_stat
     # libc.include.sys_statvfs
-    # libc.include.sys_syscall
+    libc.include.sys_syscall
     # libc.include.sys_time
     # libc.include.sys_types
     # libc.include.sys_utsname

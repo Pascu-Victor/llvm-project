@@ -325,7 +325,7 @@ WOS::WOS(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
 
   Multilibs.setFilePathsCallback(FilePaths);
 
-  if (Multilibs.select(Flags, SelectedMultilibs)) {
+  if (Multilibs.select(D, Flags, SelectedMultilibs)) {
     // Ensure that -print-multi-directory only outputs one multilib directory.
     Multilib LastSelected = SelectedMultilibs.back();
     SelectedMultilibs = {LastSelected};
