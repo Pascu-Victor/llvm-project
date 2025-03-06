@@ -61,7 +61,7 @@ public:
   }
   bool isPICDefault() const override { return false; }
   bool isPIEDefault(const llvm::opt::ArgList &Args) const override {
-    return false;
+    return true;
   }
   bool isPICDefaultForced() const override { return false; }
   llvm::DebuggerKind getDefaultDebuggerTuning() const override {

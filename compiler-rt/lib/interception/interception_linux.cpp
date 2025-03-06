@@ -16,11 +16,11 @@
 #if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD || \
     SANITIZER_SOLARIS
 
-#include <dlfcn.h>   // for dlsym() and dlvsym()
+#  include <dlfcn.h>  // for dlsym() and dlvsym()
 
 namespace __interception {
 
-#if SANITIZER_NETBSD
+#  if SANITIZER_NETBSD
 static int StrCmp(const char *s1, const char *s2) {
   while (true) {
     if (*s1 != *s2)
@@ -31,14 +31,14 @@ static int StrCmp(const char *s1, const char *s2) {
     s2++;
   }
 }
-#endif
+#  endif
 
 static void *GetFuncAddr(const char *name, uptr trampoline) {
-#if SANITIZER_NETBSD
+#  if SANITIZER_NETBSD
   // FIXME: Find a better way to handle renames
   if (StrCmp(name, "sigaction"))
     name = "__sigaction14";
-#endif
+#  endif
   void *addr = dlsym(RTLD_NEXT, name);
   if (!addr) {
     // If the lookup using RTLD_NEXT failed, the sanitizer runtime library is
@@ -64,17 +64,9 @@ bool InterceptFunction(const char *name, uptr *ptr_to_real, uptr func,
 }
 
 // dlvsym is a GNU extension supported by some other platforms.
-#if SANITIZER_GLIBC || SANITIZER_FREEBSD || SANITIZER_NETBSD
-static void *GetFuncAddr(const char *name, const char *ver) {
-  return dlvsym(RTLD_NEXT, name, ver);
-}
+#  if SANITIZER_GLIBC || SANITIZER_FREEBSD || SANITIZER_NETBSD
+#    warning "UNIMPLEMENTED: dlvsym"
 
-bool InterceptFunction(const char *name, const char *ver, uptr *ptr_to_real,
-                       uptr func, uptr trampoline) {
-  void *addr = GetFuncAddr(name, ver);
-  *ptr_to_real = (uptr)addr;
-  return addr && (func == trampoline);
-}
 #  endif  // SANITIZER_GLIBC || SANITIZER_FREEBSD || SANITIZER_NETBSD
 
 }  // namespace __interception
