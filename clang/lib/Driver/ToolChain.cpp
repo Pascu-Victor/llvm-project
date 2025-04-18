@@ -205,15 +205,6 @@ static void processMultilibCustomFlags(Multilib::flags_list &List,
   }
 }
 
-static void processMultilibCustomFlags(Multilib::flags_list &List,
-                                       const llvm::opt::ArgList &Args) {
-  for (const Arg *MultilibFlagArg :
-       Args.filtered(options::OPT_fmultilib_flag)) {
-    List.push_back(MultilibFlagArg->getAsString(Args));
-    MultilibFlagArg->claim();
-  }
-}
-
 static void getAArch64MultilibFlags(const Driver &D, const llvm::Triple &Triple,
                                     const llvm::opt::ArgList &Args,
                                     Multilib::flags_list &Result) {

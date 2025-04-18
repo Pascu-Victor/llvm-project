@@ -1721,28 +1721,6 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   std::unique_ptr<llvm::opt::InputArgList> UArgs =
       std::make_unique<InputArgList>(std::move(Args));
 
-  // Owned by the host.
-  const ToolChain &TC =
-      getToolChain(*UArgs, computeTargetTriple(*this, TargetTriple, *UArgs));
-
-  {
-    SmallVector<std::string> MultilibMacroDefinesStr =
-        TC.getMultilibMacroDefinesStr(*UArgs);
-    SmallVector<const char *> MLMacroDefinesChar(
-        llvm::map_range(MultilibMacroDefinesStr, [&UArgs](const auto &S) {
-          return UArgs->MakeArgString(Twine("-D") + Twine(S));
-        }));
-    bool MLContainsError;
-    auto MultilibMacroDefineList =
-        std::make_unique<InputArgList>(ParseArgStrings(
-            MLMacroDefinesChar, /*UseDriverMode=*/false, MLContainsError));
-    if (!MLContainsError) {
-      for (auto *Opt : *MultilibMacroDefineList) {
-        appendOneArg(*UArgs, Opt);
-      }
-    }
-  }
-
   // Perform the default argument translations.
   DerivedArgList *TranslatedArgs = TranslateInputArgs(*UArgs);
 
