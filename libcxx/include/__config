@@ -832,7 +832,7 @@ typedef __char32_t char32_t;
 // clang-format on
 #      undef _LIBCPP_HAS_THREAD_API_PTHREAD
 #      define _LIBCPP_HAS_THREAD_API_PTHREAD 1
-#    elif defined(__Fuchsia__)
+#    elif defined(__Fuchsia__) || defined(__WOS__)
 // TODO(44575): Switch to C11 thread API when possible.
 #      undef _LIBCPP_HAS_THREAD_API_PTHREAD
 #      define _LIBCPP_HAS_THREAD_API_PTHREAD 1
@@ -911,7 +911,7 @@ typedef __char32_t char32_t;
 #  endif
 
 #  if defined(__BIONIC__) || defined(__NuttX__) || defined(__Fuchsia__) || defined(__wasi__) ||                        \
-      _LIBCPP_HAS_MUSL_LIBC || defined(__OpenBSD__) || defined(__LLVM_LIBC__)
+      _LIBCPP_HAS_MUSL_LIBC || defined(__OpenBSD__) || defined(__LLVM_LIBC__) || defined(__WOS__)
 #    define _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
 #  endif
 
