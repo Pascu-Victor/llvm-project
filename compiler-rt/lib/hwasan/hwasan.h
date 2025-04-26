@@ -24,15 +24,15 @@
 #include "ubsan/ubsan_platform.h"
 
 #ifndef HWASAN_CONTAINS_UBSAN
-# define HWASAN_CONTAINS_UBSAN CAN_SANITIZE_UB
+#  define HWASAN_CONTAINS_UBSAN CAN_SANITIZE_UB
 #endif
 
 #ifndef HWASAN_WITH_INTERCEPTORS
-#define HWASAN_WITH_INTERCEPTORS 0
+#  define HWASAN_WITH_INTERCEPTORS 0
 #endif
 
 #ifndef HWASAN_REPLACE_OPERATORS_NEW_AND_DELETE
-#define HWASAN_REPLACE_OPERATORS_NEW_AND_DELETE HWASAN_WITH_INTERCEPTORS
+#  define HWASAN_REPLACE_OPERATORS_NEW_AND_DELETE HWASAN_WITH_INTERCEPTORS
 #endif
 
 typedef u8 tag_t;
@@ -133,22 +133,22 @@ void *hwasan_pvalloc(uptr size, StackTrace *stack);
 void *hwasan_aligned_alloc(uptr alignment, uptr size, StackTrace *stack);
 void *hwasan_memalign(uptr alignment, uptr size, StackTrace *stack);
 int hwasan_posix_memalign(void **memptr, uptr alignment, uptr size,
-                        StackTrace *stack);
+                          StackTrace *stack);
 void hwasan_free(void *ptr, StackTrace *stack);
 
 void InstallAtExitHandler();
 
-#define GET_MALLOC_STACK_TRACE                                            \
-  UNINITIALIZED BufferedStackTrace stack;                                 \
-  if (hwasan_inited)                                                      \
-    stack.Unwind(StackTrace::GetCurrentPc(), GET_CURRENT_FRAME(),         \
-                 nullptr, common_flags()->fast_unwind_on_malloc,          \
-                 common_flags()->malloc_context_size)
+#define GET_MALLOC_STACK_TRACE                                           \
+  UNINITIALIZED BufferedStackTrace stack;                                \
+  if (hwasan_inited)                                                     \
+  stack.Unwind(StackTrace::GetCurrentPc(), GET_CURRENT_FRAME(), nullptr, \
+               common_flags()->fast_unwind_on_malloc,                    \
+               common_flags()->malloc_context_size)
 
-#define GET_FATAL_STACK_TRACE_PC_BP(pc, bp)              \
-  UNINITIALIZED BufferedStackTrace stack;                \
-  if (hwasan_inited)                                     \
-    stack.Unwind(pc, bp, nullptr, common_flags()->fast_unwind_on_fatal)
+#define GET_FATAL_STACK_TRACE_PC_BP(pc, bp) \
+  UNINITIALIZED BufferedStackTrace stack;   \
+  if (hwasan_inited)                        \
+  stack.Unwind(pc, bp, nullptr, common_flags()->fast_unwind_on_fatal)
 
 void HwasanTSDInit();
 void HwasanTSDThreadInit();
@@ -214,10 +214,10 @@ struct __hw_jmp_buf_struct {
   //
   // We add a __magic field to our struct to catch cases where libc's setjmp
   // populated the jmp_buf instead of our interceptor.
-  __hw_register_buf __jmpbuf; // Calling environment.
+  __hw_register_buf __jmpbuf;     // Calling environment.
   unsigned __mask_was_saved : 1;  // Saved the signal mask?
-  unsigned __magic : 31;      // Used to distinguish __hw_jmp_buf from jmp_buf.
-  __hw_sigset_t __saved_mask; // Saved signal mask.
+  unsigned __magic : 31;       // Used to distinguish __hw_jmp_buf from jmp_buf.
+  __hw_sigset_t __saved_mask;  // Saved signal mask.
 };
 typedef struct __hw_jmp_buf_struct __hw_jmp_buf[1];
 typedef struct __hw_jmp_buf_struct __hw_sigjmp_buf[1];

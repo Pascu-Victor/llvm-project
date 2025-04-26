@@ -8,6 +8,8 @@ include_directories(..)
 
 set(SAFESTACK_CFLAGS ${SANITIZER_COMMON_CFLAGS})
 
+message(STATUS "SafeStack supported architectures: ${arch}")
+
 foreach(arch ${SAFESTACK_SUPPORTED_ARCH})
   add_compiler_rt_runtime(clang_rt.safestack
     STATIC

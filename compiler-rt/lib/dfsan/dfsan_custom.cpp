@@ -19,6 +19,9 @@
 #include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
+#ifndef __USE_GNU
+#  define __USE_GNU
+#endif
 #include <sched.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -44,16 +47,17 @@
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_linux.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
+#include "sanitizer_common/sanitizer_wos.h"
 
 using namespace __dfsan;
 
-#define CALL_WEAK_INTERCEPTOR_HOOK(f, ...)                                     \
-  do {                                                                         \
-    if (f)                                                                     \
-      f(__VA_ARGS__);                                                          \
+#define CALL_WEAK_INTERCEPTOR_HOOK(f, ...) \
+  do {                                     \
+    if (f)                                 \
+      f(__VA_ARGS__);                      \
   } while (false)
 #define DECLARE_WEAK_INTERCEPTOR_HOOK(f, ...) \
-SANITIZER_INTERFACE_ATTRIBUTE SANITIZER_WEAK_ATTRIBUTE void f(__VA_ARGS__);
+  SANITIZER_INTERFACE_ATTRIBUTE SANITIZER_WEAK_ATTRIBUTE void f(__VA_ARGS__);
 
 #define WRAPPER_ALIAS(fun, real)                                          \
   SANITIZER_INTERFACE_ATTRIBUTE void __dfsw_##fun() ALIAS(__dfsw_##real); \
@@ -86,9 +90,11 @@ class SignalSpinLocker {
 StaticSpinMutex SignalSpinLocker::sigactions_mu;
 
 extern "C" {
-SANITIZER_INTERFACE_ATTRIBUTE int
-__dfsw_stat(const char *path, struct stat *buf, dfsan_label path_label,
-            dfsan_label buf_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_stat(const char *path,
+                                              struct stat *buf,
+                                              dfsan_label path_label,
+                                              dfsan_label buf_label,
+                                              dfsan_label *ret_label) {
   int ret = stat(path, buf);
   if (ret == 0)
     dfsan_set_label(0, buf, sizeof(struct stat));
@@ -263,7 +269,7 @@ SANITIZER_INTERFACE_ATTRIBUTE char *__dfso_strsep(
 
 static int dfsan_memcmp_bcmp(const void *s1, const void *s2, size_t n,
                              size_t *bytes_read) {
-  const char *cs1 = (const char *) s1, *cs2 = (const char *) s2;
+  const char *cs1 = (const char *)s1, *cs2 = (const char *)s2;
   for (size_t i = 0; i != n; ++i) {
     if (cs1[i] != cs2[i]) {
       *bytes_read = i + 1;
@@ -518,9 +524,9 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfso_strncasecmp(
   return r;
 }
 
-
-SANITIZER_INTERFACE_ATTRIBUTE size_t
-__dfsw_strlen(const char *s, dfsan_label s_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE size_t __dfsw_strlen(const char *s,
+                                                   dfsan_label s_label,
+                                                   dfsan_label *ret_label) {
   size_t ret = strlen(s);
   if (flags().strict_data_dependencies) {
     *ret_label = 0;
@@ -643,9 +649,9 @@ void *__dfso_memmove(void *dest, const void *src, size_t n,
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
-void *__dfsw_memset(void *s, int c, size_t n,
-                    dfsan_label s_label, dfsan_label c_label,
-                    dfsan_label n_label, dfsan_label *ret_label) {
+void *__dfsw_memset(void *s, int c, size_t n, dfsan_label s_label,
+                    dfsan_label c_label, dfsan_label n_label,
+                    dfsan_label *ret_label) {
   dfsan_memset(s, c, c_label, n);
   *ret_label = s_label;
   return s;
@@ -719,11 +725,12 @@ SANITIZER_INTERFACE_ATTRIBUTE char *__dfso_strncat(
   return ret;
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE char *
-__dfsw_strdup(const char *s, dfsan_label s_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strdup(const char *s,
+                                                  dfsan_label s_label,
+                                                  dfsan_label *ret_label) {
   size_t len = strlen(s);
-  void *p = malloc(len+1);
-  dfsan_memcpy(p, s, len+1);
+  void *p = malloc(len + 1);
+  dfsan_memcpy(p, s, len + 1);
   *ret_label = 0;
   return static_cast<char *>(p);
 }
@@ -740,14 +747,13 @@ SANITIZER_INTERFACE_ATTRIBUTE char *__dfso_strdup(const char *s,
   return static_cast<char *>(p);
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE char *
-__dfsw_strncpy(char *s1, const char *s2, size_t n, dfsan_label s1_label,
-               dfsan_label s2_label, dfsan_label n_label,
-               dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strncpy(
+    char *s1, const char *s2, size_t n, dfsan_label s1_label,
+    dfsan_label s2_label, dfsan_label n_label, dfsan_label *ret_label) {
   size_t len = strlen(s2);
   if (len < n) {
-    dfsan_memcpy(s1, s2, len+1);
-    dfsan_memset(s1+len+1, 0, 0, n-len-1);
+    dfsan_memcpy(s1, s2, len + 1);
+    dfsan_memset(s1 + len + 1, 0, 0, n - len - 1);
   } else {
     dfsan_memcpy(s1, s2, n);
   }
@@ -774,11 +780,10 @@ SANITIZER_INTERFACE_ATTRIBUTE char *__dfso_strncpy(
   return s1;
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE ssize_t
-__dfsw_pread(int fd, void *buf, size_t count, off_t offset,
-             dfsan_label fd_label, dfsan_label buf_label,
-             dfsan_label count_label, dfsan_label offset_label,
-             dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE ssize_t __dfsw_pread(
+    int fd, void *buf, size_t count, off_t offset, dfsan_label fd_label,
+    dfsan_label buf_label, dfsan_label count_label, dfsan_label offset_label,
+    dfsan_label *ret_label) {
   ssize_t ret = pread(fd, buf, count, offset);
   if (ret > 0)
     dfsan_set_label(0, buf, ret);
@@ -796,11 +801,9 @@ SANITIZER_INTERFACE_ATTRIBUTE ssize_t __dfso_pread(
                       offset_label, ret_label);
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE ssize_t
-__dfsw_read(int fd, void *buf, size_t count,
-             dfsan_label fd_label, dfsan_label buf_label,
-             dfsan_label count_label,
-             dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE ssize_t __dfsw_read(
+    int fd, void *buf, size_t count, dfsan_label fd_label,
+    dfsan_label buf_label, dfsan_label count_label, dfsan_label *ret_label) {
   ssize_t ret = read(fd, buf, count);
   if (ret > 0)
     dfsan_set_label(0, buf, ret);
@@ -843,9 +846,11 @@ static void dfsan_set_zero_label(const void *ptr, uptr size) {
 // dlopen() ultimately calls mmap() down inside the loader, which generally
 // doesn't participate in dynamic symbol resolution.  Therefore we won't
 // intercept its calls to mmap, and we have to hook it here.
-SANITIZER_INTERFACE_ATTRIBUTE void *
-__dfsw_dlopen(const char *filename, int flag, dfsan_label filename_label,
-              dfsan_label flag_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE void *__dfsw_dlopen(const char *filename,
+                                                  int flag,
+                                                  dfsan_label filename_label,
+                                                  dfsan_label flag_label,
+                                                  dfsan_label *ret_label) {
   void *handle = dlopen(filename, flag);
   link_map *map = GET_LINK_MAP_BY_DLOPEN_HANDLE(handle);
   if (filename && map)
@@ -1207,9 +1212,10 @@ char *__dfso_strcpy(char *dest, const char *src, dfsan_label dst_label,
 }
 
 template <typename Fn>
-static ALWAYS_INLINE auto dfsan_strtol_impl(
-    Fn real, const char *nptr, char **endptr, int base,
-    char **tmp_endptr) -> decltype(real(nullptr, nullptr, 0)) {
+static ALWAYS_INLINE auto dfsan_strtol_impl(Fn real, const char *nptr,
+                                            char **endptr, int base,
+                                            char **tmp_endptr)
+    -> decltype(real(nullptr, nullptr, 0)) {
   assert(tmp_endptr);
   auto ret = real(nptr, tmp_endptr, base);
   if (endptr)
@@ -1259,9 +1265,8 @@ static void dfsan_strtod_label(const char *nptr, const char *tmp_endptr,
                                dfsan_label *ret_label) {
   if (tmp_endptr > nptr) {
     // If *tmp_endptr is '\0' include its label as well.
-    *ret_label = dfsan_read_label(
-        nptr,
-        tmp_endptr - nptr + (*tmp_endptr ? 0 : 1));
+    *ret_label =
+        dfsan_read_label(nptr, tmp_endptr - nptr + (*tmp_endptr ? 0 : 1));
   } else {
     *ret_label = 0;
   }
@@ -1332,7 +1337,7 @@ WRAPPER_ALIAS(__isoc23_strtoull, strtoull)
 SANITIZER_INTERFACE_ATTRIBUTE
 time_t __dfsw_time(time_t *t, dfsan_label t_label, dfsan_label *ret_label) {
   time_t ret = time(t);
-  if (ret != (time_t) -1 && t) {
+  if (ret != (time_t)-1 && t) {
     dfsan_set_label(0, t, sizeof(time_t));
   }
   *ret_label = 0;
@@ -1412,11 +1417,11 @@ struct tm *__dfso_localtime_r(const time_t *timep, struct tm *result,
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
-int __dfsw_getpwuid_r(id_t uid, struct passwd *pwd,
-                      char *buf, size_t buflen, struct passwd **result,
-                      dfsan_label uid_label, dfsan_label pwd_label,
-                      dfsan_label buf_label, dfsan_label buflen_label,
-                      dfsan_label result_label, dfsan_label *ret_label) {
+int __dfsw_getpwuid_r(id_t uid, struct passwd *pwd, char *buf, size_t buflen,
+                      struct passwd **result, dfsan_label uid_label,
+                      dfsan_label pwd_label, dfsan_label buf_label,
+                      dfsan_label buflen_label, dfsan_label result_label,
+                      dfsan_label *ret_label) {
   // Store the data in pwd, the strings referenced from pwd in buf, and the
   // address of pwd in *result.  On failure, NULL is stored in *result.
   int ret = getpwuid_r(uid, pwd, buf, buflen, result);
@@ -1425,7 +1430,7 @@ int __dfsw_getpwuid_r(id_t uid, struct passwd *pwd,
     dfsan_set_label(0, buf, strlen(buf) + 1);
   }
   *ret_label = 0;
-  dfsan_set_label(0, result, sizeof(struct passwd*));
+  dfsan_set_label(0, result, sizeof(struct passwd *));
   return ret;
 }
 
@@ -1813,9 +1818,8 @@ SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strrchr(char *s, int c,
   if (flags().strict_data_dependencies) {
     *ret_label = ret ? s_label : 0;
   } else {
-    *ret_label =
-        dfsan_union(dfsan_read_label(s, strlen(s) + 1),
-                    dfsan_union(s_label, c_label));
+    *ret_label = dfsan_union(dfsan_read_label(s, strlen(s) + 1),
+                             dfsan_union(s_label, c_label));
   }
 
   return ret;
@@ -1974,11 +1978,10 @@ SANITIZER_INTERFACE_ATTRIBUTE ssize_t __dfso_recvmsg(
                         flags_label, ret_label);
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE int
-__dfsw_socketpair(int domain, int type, int protocol, int sv[2],
-                  dfsan_label domain_label, dfsan_label type_label,
-                  dfsan_label protocol_label, dfsan_label sv_label,
-                  dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_socketpair(
+    int domain, int type, int protocol, int sv[2], dfsan_label domain_label,
+    dfsan_label type_label, dfsan_label protocol_label, dfsan_label sv_label,
+    dfsan_label *ret_label) {
   int ret = socketpair(domain, type, protocol, sv);
   *ret_label = 0;
   if (ret == 0) {
@@ -2132,10 +2135,9 @@ static inline void setup_tls_args_for_write_callback(
   }
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE int
-__dfsw_write(int fd, const void *buf, size_t count,
-             dfsan_label fd_label, dfsan_label buf_label,
-             dfsan_label count_label, dfsan_label *ret_label) {
+SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_write(
+    int fd, const void *buf, size_t count, dfsan_label fd_label,
+    dfsan_label buf_label, dfsan_label count_label, dfsan_label *ret_label) {
   if (write_callback_info.write_callback) {
     setup_tls_args_for_write_callback(fd_label, buf_label, count_label, false,
                                       0, 0, 0);
@@ -2180,14 +2182,14 @@ struct Formatter {
 
   int format() {
     char *tmp_fmt = build_format_string();
-    int retval =
-        snprintf(str + str_off, str_off < size ? size - str_off : 0, tmp_fmt,
-                 0 /* used only to avoid warnings */);
+    int retval = snprintf(str + str_off, str_off < size ? size - str_off : 0,
+                          tmp_fmt, 0 /* used only to avoid warnings */);
     free(tmp_fmt);
     return retval;
   }
 
-  template <typename T> int format(T arg) {
+  template <typename T>
+  int format(T arg) {
     char *tmp_fmt = build_format_string();
     int retval;
     if (width >= 0) {
@@ -2270,7 +2272,8 @@ static int format_buffer(char *str, size_t size, const char *fmt,
       // Ordinary character. Consume all the characters until a '%' or the end
       // of the string.
       for (; *(formatter.fmt_cur + 1) && *(formatter.fmt_cur + 1) != '%';
-           ++formatter.fmt_cur) {}
+           ++formatter.fmt_cur) {
+      }
       retval = formatter.format();
       dfsan_set_label(0, formatter.str_cur(),
                       formatter.num_written_bytes(retval));
@@ -2278,140 +2281,140 @@ static int format_buffer(char *str, size_t size, const char *fmt,
       // Conversion directive. Consume all the characters until a conversion
       // specifier or the end of the string.
       bool end_fmt = false;
-      for (; *formatter.fmt_cur && !end_fmt; ) {
+      for (; *formatter.fmt_cur && !end_fmt;) {
         switch (*++formatter.fmt_cur) {
-        case 'd':
-        case 'i':
-        case 'o':
-        case 'u':
-        case 'x':
-        case 'X':
-          switch (*(formatter.fmt_cur - 1)) {
-          case 'h':
-            // Also covers the 'hh' case (since the size of the arg is still
-            // an int).
-            retval = formatter.format(va_arg(ap, int));
-            break;
-          case 'l':
-            if (formatter.fmt_cur - formatter.fmt_start >= 2 &&
-                *(formatter.fmt_cur - 2) == 'l') {
-              retval = formatter.format(va_arg(ap, long long int));
-            } else {
-              retval = formatter.format(va_arg(ap, long int));
+          case 'd':
+          case 'i':
+          case 'o':
+          case 'u':
+          case 'x':
+          case 'X':
+            switch (*(formatter.fmt_cur - 1)) {
+              case 'h':
+                // Also covers the 'hh' case (since the size of the arg is still
+                // an int).
+                retval = formatter.format(va_arg(ap, int));
+                break;
+              case 'l':
+                if (formatter.fmt_cur - formatter.fmt_start >= 2 &&
+                    *(formatter.fmt_cur - 2) == 'l') {
+                  retval = formatter.format(va_arg(ap, long long int));
+                } else {
+                  retval = formatter.format(va_arg(ap, long int));
+                }
+                break;
+              case 'q':
+                retval = formatter.format(va_arg(ap, long long int));
+                break;
+              case 'j':
+                retval = formatter.format(va_arg(ap, intmax_t));
+                break;
+              case 'z':
+              case 't':
+                retval = formatter.format(va_arg(ap, size_t));
+                break;
+              default:
+                retval = formatter.format(va_arg(ap, int));
             }
+            if (va_origins == nullptr)
+              dfsan_set_label(*va_labels++, formatter.str_cur(),
+                              formatter.num_written_bytes(retval));
+            else
+              dfsan_set_label_origin(*va_labels++, *va_origins++,
+                                     formatter.str_cur(),
+                                     formatter.num_written_bytes(retval));
+            end_fmt = true;
             break;
-          case 'q':
-            retval = formatter.format(va_arg(ap, long long int));
+
+          case 'a':
+          case 'A':
+          case 'e':
+          case 'E':
+          case 'f':
+          case 'F':
+          case 'g':
+          case 'G':
+            if (*(formatter.fmt_cur - 1) == 'L') {
+              retval = formatter.format(va_arg(ap, long double));
+            } else {
+              retval = formatter.format(va_arg(ap, double));
+            }
+            if (va_origins == nullptr)
+              dfsan_set_label(*va_labels++, formatter.str_cur(),
+                              formatter.num_written_bytes(retval));
+            else
+              dfsan_set_label_origin(*va_labels++, *va_origins++,
+                                     formatter.str_cur(),
+                                     formatter.num_written_bytes(retval));
+            end_fmt = true;
             break;
-          case 'j':
-            retval = formatter.format(va_arg(ap, intmax_t));
-            break;
-          case 'z':
-          case 't':
-            retval = formatter.format(va_arg(ap, size_t));
-            break;
-          default:
+
+          case 'c':
             retval = formatter.format(va_arg(ap, int));
-          }
-          if (va_origins == nullptr)
-            dfsan_set_label(*va_labels++, formatter.str_cur(),
-                            formatter.num_written_bytes(retval));
-          else
-            dfsan_set_label_origin(*va_labels++, *va_origins++,
-                                   formatter.str_cur(),
-                                   formatter.num_written_bytes(retval));
-          end_fmt = true;
-          break;
+            if (va_origins == nullptr)
+              dfsan_set_label(*va_labels++, formatter.str_cur(),
+                              formatter.num_written_bytes(retval));
+            else
+              dfsan_set_label_origin(*va_labels++, *va_origins++,
+                                     formatter.str_cur(),
+                                     formatter.num_written_bytes(retval));
+            end_fmt = true;
+            break;
 
-        case 'a':
-        case 'A':
-        case 'e':
-        case 'E':
-        case 'f':
-        case 'F':
-        case 'g':
-        case 'G':
-          if (*(formatter.fmt_cur - 1) == 'L') {
-            retval = formatter.format(va_arg(ap, long double));
-          } else {
-            retval = formatter.format(va_arg(ap, double));
-          }
-          if (va_origins == nullptr)
-            dfsan_set_label(*va_labels++, formatter.str_cur(),
-                            formatter.num_written_bytes(retval));
-          else
-            dfsan_set_label_origin(*va_labels++, *va_origins++,
-                                   formatter.str_cur(),
-                                   formatter.num_written_bytes(retval));
-          end_fmt = true;
-          break;
-
-        case 'c':
-          retval = formatter.format(va_arg(ap, int));
-          if (va_origins == nullptr)
-            dfsan_set_label(*va_labels++, formatter.str_cur(),
-                            formatter.num_written_bytes(retval));
-          else
-            dfsan_set_label_origin(*va_labels++, *va_origins++,
-                                   formatter.str_cur(),
-                                   formatter.num_written_bytes(retval));
-          end_fmt = true;
-          break;
-
-        case 's': {
-          char *arg = va_arg(ap, char *);
-          retval = formatter.format(arg);
-          if (va_origins) {
-            va_origins++;
-            dfsan_mem_origin_transfer(formatter.str_cur(), arg,
+          case 's': {
+            char *arg = va_arg(ap, char *);
+            retval = formatter.format(arg);
+            if (va_origins) {
+              va_origins++;
+              dfsan_mem_origin_transfer(formatter.str_cur(), arg,
+                                        formatter.num_written_bytes(retval));
+            }
+            va_labels++;
+            dfsan_mem_shadow_transfer(formatter.str_cur(), arg,
                                       formatter.num_written_bytes(retval));
+            end_fmt = true;
+            break;
           }
-          va_labels++;
-          dfsan_mem_shadow_transfer(formatter.str_cur(), arg,
-                                    formatter.num_written_bytes(retval));
-          end_fmt = true;
-          break;
-        }
 
-        case 'p':
-          retval = formatter.format(va_arg(ap, void *));
-          if (va_origins == nullptr)
-            dfsan_set_label(*va_labels++, formatter.str_cur(),
+          case 'p':
+            retval = formatter.format(va_arg(ap, void *));
+            if (va_origins == nullptr)
+              dfsan_set_label(*va_labels++, formatter.str_cur(),
+                              formatter.num_written_bytes(retval));
+            else
+              dfsan_set_label_origin(*va_labels++, *va_origins++,
+                                     formatter.str_cur(),
+                                     formatter.num_written_bytes(retval));
+            end_fmt = true;
+            break;
+
+          case 'n': {
+            int *ptr = va_arg(ap, int *);
+            *ptr = (int)formatter.str_off;
+            va_labels++;
+            if (va_origins)
+              va_origins++;
+            dfsan_set_label(0, ptr, sizeof(ptr));
+            end_fmt = true;
+            break;
+          }
+
+          case '%':
+            retval = formatter.format();
+            dfsan_set_label(0, formatter.str_cur(),
                             formatter.num_written_bytes(retval));
-          else
-            dfsan_set_label_origin(*va_labels++, *va_origins++,
-                                   formatter.str_cur(),
-                                   formatter.num_written_bytes(retval));
-          end_fmt = true;
-          break;
+            end_fmt = true;
+            break;
 
-        case 'n': {
-          int *ptr = va_arg(ap, int *);
-          *ptr = (int)formatter.str_off;
-          va_labels++;
-          if (va_origins)
-            va_origins++;
-          dfsan_set_label(0, ptr, sizeof(ptr));
-          end_fmt = true;
-          break;
-        }
+          case '*':
+            formatter.width = va_arg(ap, int);
+            va_labels++;
+            if (va_origins)
+              va_origins++;
+            break;
 
-        case '%':
-          retval = formatter.format();
-          dfsan_set_label(0, formatter.str_cur(),
-                          formatter.num_written_bytes(retval));
-          end_fmt = true;
-          break;
-
-        case '*':
-          formatter.width = va_arg(ap, int);
-          va_labels++;
-          if (va_origins)
-            va_origins++;
-          break;
-
-        default:
-          break;
+          default:
+            break;
         }
       }
     }
@@ -2764,7 +2767,7 @@ static int scan_buffer(char *str, size_t size, const char *fmt,
     scanner.str_off += read_count;
   }
 
-  (void)va_labels; // Silence unused-but-set-parameter warning
+  (void)va_labels;  // Silence unused-but-set-parameter warning
   *ret_label = 0;
   if (ret_origin)
     *ret_origin = 0;

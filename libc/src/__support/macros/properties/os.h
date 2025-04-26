@@ -29,7 +29,7 @@
 #define LIBC_TARGET_OS_IS_FUCHSIA
 #endif
 
-#if defined(__wos__)
+#if defined(__WOS__)
 #define LIBC_TARGET_OS_IS_WOS
 #endif
 

@@ -507,6 +507,7 @@ set(files
   __locale_dir/locale_base_api/bsd_locale_fallbacks.h
   __locale_dir/locale_base_api/ibm.h
   __locale_dir/locale_base_api/musl.h
+  __locale_dir/locale_base_api/mlibc.h
   __locale_dir/locale_base_api/openbsd.h
   __locale_dir/pad_and_output.h
   __locale_dir/support/apple.h
@@ -1558,6 +1559,7 @@ set(files
   __cxx03/__locale_dir/locale_base_api/ibm.h
   __cxx03/__locale_dir/locale_base_api/locale_guard.h
   __cxx03/__locale_dir/locale_base_api/musl.h
+  __cxx03/__locale_dir/locale_base_api/mlibc.h
   __cxx03/__locale_dir/locale_base_api/newlib.h
   __cxx03/__locale_dir/locale_base_api/openbsd.h
   __cxx03/__locale_dir/locale_base_api/win32.h

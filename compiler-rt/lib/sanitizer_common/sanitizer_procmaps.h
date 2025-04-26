@@ -16,15 +16,15 @@
 #include "sanitizer_platform.h"
 
 #if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD || \
-    SANITIZER_APPLE || SANITIZER_SOLARIS ||  \
-    SANITIZER_FUCHSIA
+    SANITIZER_APPLE || SANITIZER_SOLARIS || SANITIZER_FUCHSIA || SANITIZER_WOS
 
-#include "sanitizer_common.h"
-#include "sanitizer_internal_defs.h"
-#include "sanitizer_fuchsia.h"
-#include "sanitizer_linux.h"
-#include "sanitizer_mac.h"
-#include "sanitizer_mutex.h"
+#  include "sanitizer_common.h"
+#  include "sanitizer_fuchsia.h"
+#  include "sanitizer_internal_defs.h"
+#  include "sanitizer_linux.h"
+#  include "sanitizer_mac.h"
+#  include "sanitizer_mutex.h"
+#  include "sanitizer_wos.h"
 
 namespace __sanitizer {
 
@@ -81,17 +81,17 @@ class MemoryMappingLayout : public MemoryMappingLayoutBase {
  public:
   explicit MemoryMappingLayout(bool cache_enabled);
 
-// This destructor cannot be virtual, as it would cause an operator new() linking
-// failures in hwasan test cases. However non-virtual destructors emit warnings
-// in macOS build, hence disabling those
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wnon-virtual-dtor"
-#endif
+// This destructor cannot be virtual, as it would cause an operator new()
+// linking failures in hwasan test cases. However non-virtual destructors emit
+// warnings in macOS build, hence disabling those
+#  ifdef __clang__
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wnon-virtual-dtor"
+#  endif
   ~MemoryMappingLayout();
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+#  ifdef __clang__
+#    pragma clang diagnostic pop
+#  endif
 
   virtual bool Next(MemoryMappedSegment *segment) override;
   virtual bool Error() const override;
@@ -105,9 +105,9 @@ class MemoryMappingLayout : public MemoryMappingLayoutBase {
   void DumpListOfModules(InternalMmapVectorNoCtor<LoadedModule> *modules);
 
  protected:
-#if SANITIZER_APPLE
+#  if SANITIZER_APPLE
   virtual const ImageHeader *CurrentImageHeader();
-#endif
+#  endif
   MemoryMappingLayoutData data_;
 
  private:

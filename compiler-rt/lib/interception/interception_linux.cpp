@@ -65,8 +65,19 @@ bool InterceptFunction(const char *name, uptr *ptr_to_real, uptr func,
 
 // dlvsym is a GNU extension supported by some other platforms.
 #  if SANITIZER_GLIBC || SANITIZER_FREEBSD || SANITIZER_NETBSD
-#    warning "UNIMPLEMENTED: dlvsym"
+static void *GetFuncAddr(const char *name, const char *ver) {
+  // TODO: dlvsym is not implemented in musl libc
+  (void)ver;
+  return dlsym(RTLD_NEXT, name);
+  //   return dlvsym(RTLD_NEXT, name, ver);
+}
 
+bool InterceptFunction(const char *name, const char *ver, uptr *ptr_to_real,
+                       uptr func, uptr trampoline) {
+  void *addr = GetFuncAddr(name, ver);
+  *ptr_to_real = (uptr)addr;
+  return addr && (func == trampoline);
+}
 #  endif  // SANITIZER_GLIBC || SANITIZER_FREEBSD || SANITIZER_NETBSD
 
 }  // namespace __interception

@@ -17,71 +17,78 @@
 #include "sanitizer_internal_defs.h"
 #include "sanitizer_platform.h"
 
-#if SANITIZER_POSIX
-#define SI_POSIX 1
+#if SANITIZER_POSIX || SANITIZER_WOS
+#  define SI_POSIX 1
 #else
-#define SI_POSIX 0
+#  define SI_POSIX 0
 #endif
 
 #if !SANITIZER_WINDOWS
-#define SI_WINDOWS 0
+#  define SI_WINDOWS 0
 #else
-#define SI_WINDOWS 1
+#  define SI_WINDOWS 1
 #endif
 
 #if SI_WINDOWS && SI_POSIX
-#error "Windows is not POSIX!"
+#  error "Windows is not POSIX!"
 #endif
 
 #if SI_POSIX
-#include "sanitizer_platform_limits_freebsd.h"
-#include "sanitizer_platform_limits_netbsd.h"
-#include "sanitizer_platform_limits_posix.h"
-#include "sanitizer_platform_limits_solaris.h"
+#  include "sanitizer_platform_limits_freebsd.h"
+#  include "sanitizer_platform_limits_netbsd.h"
+#  include "sanitizer_platform_limits_posix.h"
+#  include "sanitizer_platform_limits_solaris.h"
+#  include "sanitizer_platform_limits_wos.h"
 #endif
 
 #if SANITIZER_LINUX && !SANITIZER_ANDROID
-#define SI_LINUX_NOT_ANDROID 1
+#  define SI_LINUX_NOT_ANDROID 1
 #else
-#define SI_LINUX_NOT_ANDROID 0
+#  define SI_LINUX_NOT_ANDROID 0
 #endif
 
 #if SANITIZER_GLIBC
-#define SI_GLIBC 1
+#  define SI_GLIBC 1
 #else
-#define SI_GLIBC 0
+#  define SI_GLIBC 0
 #endif
 
 #if SANITIZER_ANDROID
-#define SI_ANDROID 1
+#  define SI_ANDROID 1
 #else
-#define SI_ANDROID 0
+#  define SI_ANDROID 0
 #endif
 
 #if SANITIZER_FREEBSD
-#define SI_FREEBSD 1
+#  define SI_FREEBSD 1
 #else
-#define SI_FREEBSD 0
+#  define SI_FREEBSD 0
 #endif
 
 #if SANITIZER_NETBSD
-#define SI_NETBSD 1
+#  define SI_NETBSD 1
 #else
-#define SI_NETBSD 0
+#  define SI_NETBSD 0
 #endif
 
 #if SANITIZER_LINUX
-#define SI_LINUX 1
+#  define SI_LINUX 1
 #else
-#define SI_LINUX 0
+#  define SI_LINUX 0
+#endif
+
+#if SANITIZER_WOS
+#  define SI_WOS 1
+#else
+#  define SI_WOS 0
 #endif
 
 #if SANITIZER_APPLE
-#define SI_MAC 1
-#define SI_NOT_MAC 0
+#  define SI_MAC 1
+#  define SI_NOT_MAC 0
 #else
-#define SI_MAC 0
-#define SI_NOT_MAC 1
+#  define SI_MAC 0
+#  define SI_NOT_MAC 1
 #endif
 
 #if SANITIZER_APPLE
@@ -104,59 +111,59 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #endif  // SANITIZER_APPLE
 
 #if SANITIZER_IOS
-#define SI_IOS 1
+#  define SI_IOS 1
 #else
-#define SI_IOS 0
+#  define SI_IOS 0
 #endif
 
 #if SANITIZER_IOSSIM
-#define SI_IOSSIM 1
+#  define SI_IOSSIM 1
 #else
-#define SI_IOSSIM 0
+#  define SI_IOSSIM 0
 #endif
 
 #if SANITIZER_WATCHOS
-#define SI_WATCHOS 1
+#  define SI_WATCHOS 1
 #else
-#define SI_WATCHOS 0
+#  define SI_WATCHOS 0
 #endif
 
 #if SANITIZER_TVOS
-#define SI_TVOS 1
+#  define SI_TVOS 1
 #else
-#define SI_TVOS 0
+#  define SI_TVOS 0
 #endif
 
 #if SANITIZER_FUCHSIA
-#define SI_NOT_FUCHSIA 0
-#define SI_FUCHSIA 1
+#  define SI_NOT_FUCHSIA 0
+#  define SI_FUCHSIA 1
 #else
-#define SI_NOT_FUCHSIA 1
-#define SI_FUCHSIA 0
+#  define SI_NOT_FUCHSIA 1
+#  define SI_FUCHSIA 0
 #endif
 
 #if SANITIZER_SOLARIS
-#define SI_SOLARIS 1
+#  define SI_SOLARIS 1
 #else
-#define SI_SOLARIS 0
+#  define SI_SOLARIS 0
 #endif
 
 #if SANITIZER_SOLARIS32
-#define SI_SOLARIS32 1
+#  define SI_SOLARIS32 1
 #else
-#define SI_SOLARIS32 0
+#  define SI_SOLARIS32 0
 #endif
 
 #if SANITIZER_POSIX && !SANITIZER_APPLE
-#define SI_POSIX_NOT_MAC 1
+#  define SI_POSIX_NOT_MAC 1
 #else
-#define SI_POSIX_NOT_MAC 0
+#  define SI_POSIX_NOT_MAC 0
 #endif
 
 #if SANITIZER_LINUX && !SANITIZER_FREEBSD
-#define SI_LINUX_NOT_FREEBSD 1
+#  define SI_LINUX_NOT_FREEBSD 1
 #else
-#define SI_LINUX_NOT_FREEBSD 0
+#  define SI_LINUX_NOT_FREEBSD 0
 #endif
 
 #define SANITIZER_INTERCEPT_STRLEN SI_NOT_FUCHSIA
@@ -183,9 +190,9 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT___STRNDUP SI_GLIBC
 #if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
     __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
-#define SI_MAC_DEPLOYMENT_BELOW_10_7 1
+#  define SI_MAC_DEPLOYMENT_BELOW_10_7 1
 #else
-#define SI_MAC_DEPLOYMENT_BELOW_10_7 0
+#  define SI_MAC_DEPLOYMENT_BELOW_10_7 0
 #endif
 // memmem on Darwin doesn't exist on 10.6
 // FIXME: enable memmem on Windows.
@@ -233,9 +240,9 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_ISOC99_SCANF SI_GLIBC
 
 #ifndef SANITIZER_INTERCEPT_PRINTF
-#define SANITIZER_INTERCEPT_PRINTF SI_POSIX
-#define SANITIZER_INTERCEPT_PRINTF_L (SI_FREEBSD || SI_NETBSD)
-#define SANITIZER_INTERCEPT_ISOC99_PRINTF SI_GLIBC
+#  define SANITIZER_INTERCEPT_PRINTF SI_POSIX
+#  define SANITIZER_INTERCEPT_PRINTF_L (SI_FREEBSD || SI_NETBSD)
+#  define SANITIZER_INTERCEPT_ISOC99_PRINTF SI_GLIBC
 #endif
 
 #define SANITIZER_INTERCEPT___PRINTF_CHK \
@@ -310,7 +317,7 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
      defined(__sparc__))
 #  define SANITIZER_INTERCEPT_PTRACE 1
 #else
-#define SANITIZER_INTERCEPT_PTRACE 0
+#  define SANITIZER_INTERCEPT_PTRACE 0
 #endif
 #define SANITIZER_INTERCEPT_SETLOCALE SI_POSIX
 #define SANITIZER_INTERCEPT_GETCWD SI_POSIX
@@ -367,7 +374,7 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_GETMNTENT_R SI_LINUX_NOT_ANDROID
 #define SANITIZER_INTERCEPT_STATFS \
   (SI_FREEBSD || SI_MAC || SI_LINUX_NOT_ANDROID || SI_SOLARIS)
-#define SANITIZER_INTERCEPT_STATFS64 SI_GLIBC && SANITIZER_HAS_STATFS64
+#define SANITIZER_INTERCEPT_STATFS64 SI_GLIBC &&SANITIZER_HAS_STATFS64
 #define SANITIZER_INTERCEPT_STATVFS \
   (SI_FREEBSD || SI_NETBSD || SI_LINUX_NOT_ANDROID)
 #define SANITIZER_INTERCEPT_STATVFS64 SI_GLIBC
@@ -378,7 +385,7 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_ETHER_R (SI_FREEBSD || SI_LINUX_NOT_ANDROID)
 #define SANITIZER_INTERCEPT_SHMCTL                                       \
   (((SI_FREEBSD || SI_LINUX_NOT_ANDROID) && SANITIZER_WORDSIZE == 64) || \
-   SI_NETBSD || SI_SOLARIS)
+   SI_NETBSD || SI_SOLARIS || SI_WOS)
 #define SANITIZER_INTERCEPT_RANDOM_R SI_GLIBC
 #define SANITIZER_INTERCEPT_PTHREAD_ATTR_GET SI_POSIX
 #define SANITIZER_INTERCEPT_PTHREAD_ATTR_GETINHERITSCHED \
@@ -434,7 +441,7 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
   (SI_FREEBSD || SI_NETBSD || SI_LINUX_NOT_ANDROID || SI_SOLARIS)
 
 #define SANITIZER_INTERCEPT__EXIT \
-  (SI_LINUX || SI_FREEBSD || SI_NETBSD || SI_MAC || SI_SOLARIS)
+  (SI_LINUX || SI_FREEBSD || SI_NETBSD || SI_MAC || SI_SOLARIS || SI_WOS)
 
 #define SANITIZER_INTERCEPT___LIBC_MUTEX SI_NETBSD
 #define SANITIZER_INTERCEPT_PTHREAD_SETNAME_NP \
@@ -454,9 +461,9 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
   (SI_FREEBSD || SI_NETBSD || SI_LINUX_NOT_ANDROID || SI_MAC || SI_SOLARIS)
 #define SANITIZER_INTERCEPT_CAPGET SI_LINUX_NOT_ANDROID
 #if SI_LINUX && defined(__arm__)
-#define SANITIZER_INTERCEPT_AEABI_MEM 1
+#  define SANITIZER_INTERCEPT_AEABI_MEM 1
 #else
-#define SANITIZER_INTERCEPT_AEABI_MEM 0
+#  define SANITIZER_INTERCEPT_AEABI_MEM 0
 #endif
 #define SANITIZER_INTERCEPT___BZERO SI_MAC || SI_GLIBC
 #define SANITIZER_INTERCEPT_BZERO SI_LINUX_NOT_ANDROID
@@ -475,8 +482,8 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_FCLOSE SI_POSIX
 
 #ifndef SANITIZER_INTERCEPT_DLOPEN_DLCLOSE
-#define SANITIZER_INTERCEPT_DLOPEN_DLCLOSE \
-  (SI_FREEBSD || SI_NETBSD || SI_LINUX_NOT_ANDROID || SI_MAC || SI_SOLARIS)
+#  define SANITIZER_INTERCEPT_DLOPEN_DLCLOSE \
+    (SI_FREEBSD || SI_NETBSD || SI_LINUX_NOT_ANDROID || SI_MAC || SI_SOLARIS)
 #endif
 
 #define SANITIZER_INTERCEPT_GETPASS \
@@ -502,10 +509,10 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_EVENTFD_READ_WRITE (SI_LINUX || SI_FREEBSD)
 
 #define SI_STAT_LINUX (SI_LINUX && __GLIBC_PREREQ(2, 33))
-#define SANITIZER_INTERCEPT_STAT                                        \
-  (SI_FREEBSD || SI_MAC || SI_ANDROID || SI_NETBSD || SI_SOLARIS ||     \
+#define SANITIZER_INTERCEPT_STAT                                    \
+  (SI_FREEBSD || SI_MAC || SI_ANDROID || SI_NETBSD || SI_SOLARIS || \
    SI_STAT_LINUX)
-#define SANITIZER_INTERCEPT_STAT64 SI_STAT_LINUX && SANITIZER_HAS_STAT64
+#define SANITIZER_INTERCEPT_STAT64 SI_STAT_LINUX &&SANITIZER_HAS_STAT64
 #define SANITIZER_INTERCEPT_LSTAT (SI_NETBSD || SI_FREEBSD || SI_STAT_LINUX)
 #define SANITIZER_INTERCEPT___XSTAT \
   ((!SANITIZER_INTERCEPT_STAT && SI_POSIX) || SI_STAT_LINUX)
@@ -547,8 +554,7 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_GID_FROM_GROUP SI_NETBSD
 #define SANITIZER_INTERCEPT_ACCESS (SI_NETBSD || SI_FREEBSD)
 #define SANITIZER_INTERCEPT_FACCESSAT (SI_NETBSD || SI_FREEBSD)
-#define SANITIZER_INTERCEPT_GETGROUPLIST \
-  (SI_NETBSD || SI_FREEBSD || SI_LINUX)
+#define SANITIZER_INTERCEPT_GETGROUPLIST (SI_NETBSD || SI_FREEBSD || SI_LINUX)
 #define SANITIZER_INTERCEPT_STRLCPY \
   (SI_NETBSD || SI_FREEBSD || SI_MAC || SI_ANDROID)
 
@@ -558,9 +564,9 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 #define SANITIZER_INTERCEPT_READLINK SI_POSIX
 #if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
     __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101000
-#define SI_MAC_DEPLOYMENT_BELOW_10_10 1
+#  define SI_MAC_DEPLOYMENT_BELOW_10_10 1
 #else
-#define SI_MAC_DEPLOYMENT_BELOW_10_10 0
+#  define SI_MAC_DEPLOYMENT_BELOW_10_10 0
 #endif
 #define SANITIZER_INTERCEPT_READLINKAT \
   (SI_POSIX && !SI_MAC_DEPLOYMENT_BELOW_10_10)
@@ -661,7 +667,7 @@ SANITIZER_WEAK_IMPORT void *aligned_alloc(__sanitizer::usize __alignment,
 // their libc funtions to be intercepted. They can selectively disable
 // interception of those functions.
 #ifdef SANITIZER_OVERRIDE_INTERCEPTORS
-#include <sanitizer_intercept_overriders.h>
+#  include <sanitizer_intercept_overriders.h>
 #endif
 
 #endif  // #ifndef SANITIZER_PLATFORM_INTERCEPTORS_H

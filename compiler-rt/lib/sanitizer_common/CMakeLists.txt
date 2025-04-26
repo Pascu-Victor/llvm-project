@@ -11,6 +11,7 @@ set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_flags.cpp
   sanitizer_flag_parser.cpp
   sanitizer_fuchsia.cpp
+  sanitizer_wos.cpp
   sanitizer_libc.cpp
   sanitizer_libignore.cpp
   sanitizer_linux.cpp
@@ -28,12 +29,14 @@ set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_procmaps_common.cpp
   sanitizer_procmaps_bsd.cpp
   sanitizer_procmaps_fuchsia.cpp
+  sanitizer_procmaps_wos.cpp
   sanitizer_procmaps_linux.cpp
   sanitizer_procmaps_mac.cpp
   sanitizer_procmaps_solaris.cpp
   sanitizer_range.cpp
   sanitizer_solaris.cpp
   sanitizer_stoptheworld_fuchsia.cpp
+  sanitizer_stoptheworld_wos.cpp
   sanitizer_stoptheworld_mac.cpp
   sanitizer_stoptheworld_win.cpp
   sanitizer_suppressions.cpp
@@ -42,6 +45,7 @@ set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_thread_registry.cpp
   sanitizer_type_traits.cpp
   sanitizer_win.cpp
+  sanitizer_wos.cpp
   sanitizer_win_interception.cpp
   )
 
@@ -151,6 +155,7 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_flags.inc
   sanitizer_flat_map.h
   sanitizer_fuchsia.h
+  sanitizer_wos.h
   sanitizer_getauxval.h
   sanitizer_hash.h
   sanitizer_interceptors_ioctl_netbsd.inc
@@ -172,6 +177,7 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_platform_interceptors.h
   sanitizer_platform_limits_netbsd.h
   sanitizer_platform_limits_posix.h
+  sanitizer_platform_limits_wos.h
   sanitizer_platform_limits_solaris.h
   sanitizer_posix.h
   sanitizer_procmaps.h
@@ -207,6 +213,7 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_tls_get_addr.h
   sanitizer_vector.h
   sanitizer_win.h
+  sanitizer_wos.h
   sanitizer_win_defs.h
   sanitizer_win_interception.h
   sanitizer_win_thunk_interception.h

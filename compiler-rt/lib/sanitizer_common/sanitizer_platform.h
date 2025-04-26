@@ -11,10 +11,9 @@
 
 #ifndef SANITIZER_PLATFORM_H
 #define SANITIZER_PLATFORM_H
-
 #if !defined(__linux__) && !defined(__FreeBSD__) && !defined(__NetBSD__) && \
     !defined(__APPLE__) && !defined(_WIN32) && !defined(__Fuchsia__) &&     \
-    !(defined(__sun__) && defined(__svr4__))
+    !(defined(__sun__) && defined(__svr4__)) && !defined(__WOS__)
 #  error "This operating system is not supported"
 #endif
 
@@ -129,6 +128,42 @@
 #  define SANITIZER_FUCHSIA 0
 #endif
 
+#if defined(__WOS__)
+#  define SANITIZER_WOS 1
+
+#  define MADV_NORMAL 0
+#  define MADV_RANDOM 1
+#  define MADV_SEQUENTIAL 2
+#  define MADV_WILLNEED 3
+#  define MADV_DONTNEED 4
+#  define MADV_FREE 8
+#  define MADV_REMOVE 9
+#  define MADV_DONTFORK 10
+#  define MADV_DOFORK 11
+#  define MADV_MERGEABLE 12
+#  define MADV_UNMERGEABLE 13
+#  define MADV_HUGEPAGE 14
+#  define MADV_NOHUGEPAGE 15
+#  define MADV_DONTDUMP 16
+#  define MADV_DODUMP 17
+#  define MADV_WIPEONFORK 18
+#  define MADV_KEEPONFORK 19
+#  define MADV_COLD 20
+#  define MADV_PAGEOUT 21
+#  define MADV_HWPOISON 100
+#  define MADV_SOFT_OFFLINE 101
+
+#  define MREMAP_MAYMOVE 1
+#  define MREMAP_FIXED 2
+
+#  define MFD_CLOEXEC 1U
+#  define MFD_ALLOW_SEALING 2U
+#  define MFD_HUGETLB 4U
+
+#else
+#  define SANITIZER_WOS 0
+#endif
+
 // Assume linux that is not glibc or android is musl libc.
 #if SANITIZER_LINUX && !SANITIZER_GLIBC && !SANITIZER_ANDROID
 #  define SANITIZER_MUSL 1
@@ -136,9 +171,9 @@
 #  define SANITIZER_MUSL 0
 #endif
 
-#define SANITIZER_POSIX                                     \
+#define SANITIZER_POSIX                                       \
   (SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_APPLE || \
-   SANITIZER_NETBSD || SANITIZER_SOLARIS)
+   SANITIZER_NETBSD || SANITIZER_SOLARIS || SANITIZER_WOS)
 
 #if __LP64__ || defined(_WIN64)
 #  define SANITIZER_WORDSIZE 64
@@ -410,7 +445,8 @@
 #  define SANITIZER_SUPPRESS_LEAK_ON_PTHREAD_EXIT 0
 #endif
 
-#if SANITIZER_FREEBSD || SANITIZER_APPLE || SANITIZER_NETBSD || SANITIZER_SOLARIS
+#if SANITIZER_FREEBSD || SANITIZER_APPLE || SANITIZER_NETBSD || \
+    SANITIZER_SOLARIS
 #  define SANITIZER_MADVISE_DONTNEED MADV_FREE
 #else
 #  define SANITIZER_MADVISE_DONTNEED MADV_DONTNEED

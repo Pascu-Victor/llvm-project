@@ -19,6 +19,7 @@
 #include "sanitizer_platform_limits_netbsd.h"
 #include "sanitizer_platform_limits_posix.h"
 #include "sanitizer_platform_limits_solaris.h"
+#include "sanitizer_platform_limits_wos.h"
 
 #if SANITIZER_POSIX
 
@@ -37,13 +38,13 @@ uptr internal_read(fd_t fd, void *buf, uptr count);
 uptr internal_write(fd_t fd, const void *buf, uptr count);
 
 // Memory
-uptr internal_mmap(void *addr, uptr length, int prot, int flags,
-                   int fd, u64 offset);
+uptr internal_mmap(void *addr, uptr length, int prot, int flags, int fd,
+                   u64 offset);
 uptr internal_munmap(void *addr, uptr length);
-#if SANITIZER_LINUX
+#  if SANITIZER_LINUX
 uptr internal_mremap(void *old_address, uptr old_size, uptr new_size, int flags,
                      void *new_address);
-#endif
+#  endif
 int internal_mprotect(void *addr, uptr length, int prot);
 int internal_madvise(uptr addr, uptr length, int advice);
 
@@ -59,11 +60,11 @@ uptr internal_unlink(const char *path);
 uptr internal_rename(const char *oldpath, const char *newpath);
 uptr internal_lseek(fd_t fd, OFF_T offset, int whence);
 
-#if SANITIZER_NETBSD
+#  if SANITIZER_NETBSD
 uptr internal_ptrace(int request, int pid, void *addr, int data);
-#else
+#  else
 uptr internal_ptrace(int request, int pid, void *addr, void *data);
-#endif
+#  endif
 uptr internal_waitpid(int pid, int *status, int options);
 
 int internal_fork();

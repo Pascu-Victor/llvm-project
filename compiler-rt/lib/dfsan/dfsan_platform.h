@@ -40,7 +40,7 @@ struct MappingDesc {
 // Note: MappingDesc::ALLOCATOR entries are only used to check for memory
 // layout compatibility. The actual allocation settings are in
 // dfsan_allocator.cpp, which need to be kept in sync.
-#if SANITIZER_LINUX && SANITIZER_WORDSIZE == 64
+#if (SANITIZER_LINUX || SANITIZER_WOS) && SANITIZER_WORDSIZE == 64
 
 #  if defined(__aarch64__)
 // The mapping assumes 48-bit VMA. AArch64 maps:

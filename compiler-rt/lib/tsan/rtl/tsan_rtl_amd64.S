@@ -33,7 +33,7 @@ ASM_SYMBOL_INTERCEPTOR(setjmp):
   // obtain SP, store in %rdi, first argument to `void __tsan_setjmp(uptr sp)`
 #if defined(__FreeBSD__) || defined(__NetBSD__)
   lea 8(%rsp), %rdi
-#elif defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__WOS__)
   lea 16(%rsp), %rdi
 #else
 # error "Unknown platform"
@@ -75,7 +75,7 @@ ASM_SYMBOL_INTERCEPTOR(_setjmp):
   // obtain SP, store in %rdi, first argument to `void __tsan_setjmp(uptr sp)`
 #if defined(__FreeBSD__) || defined(__NetBSD__)
   lea 8(%rsp), %rdi
-#elif defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__WOS__)
   lea 16(%rsp), %rdi
 #else
 # error "Unknown platform"
@@ -124,7 +124,7 @@ ASM_SYMBOL_INTERCEPTOR(sigsetjmp):
   // obtain SP, store in %rdi, first argument to `void __tsan_setjmp(uptr sp)`
 #if defined(__FreeBSD__) || defined(__NetBSD__)
   lea 24(%rsp), %rdi
-#elif defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__WOS__)
   lea 32(%rsp), %rdi
 #else
 # error "Unknown platform"
