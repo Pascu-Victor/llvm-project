@@ -1,0 +1,11 @@
+add_entrypoint_object(
+  syscall
+  SRCS
+    syscall.cpp
+  HDRS
+    ../syscall.h
+  DEPENDS
+    libc.hdr.types.size_t
+    libc.hdr.errno_macros
+    libc.src.errno.errno
+)

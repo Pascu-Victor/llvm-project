@@ -73,6 +73,7 @@ set(SCUDO_HEADERS
   fuchsia.h
   internal_defs.h
   linux.h
+  wos.h
   list.h
   local_cache.h
   memtag.h
@@ -80,6 +81,7 @@ set(SCUDO_HEADERS
   mem_map_base.h
   mem_map_fuchsia.h
   mem_map_linux.h
+  mem_map_wos.h
   mutex.h
   options.h
   platform.h
@@ -89,6 +91,7 @@ set(SCUDO_HEADERS
   release.h
   report.h
   report_linux.h
+  report_wos.h
   secondary.h
   size_class_map.h
   stack_depot.h
@@ -115,9 +118,11 @@ set(SCUDO_SOURCES
   flags.cpp
   fuchsia.cpp
   linux.cpp
+  wos.cpp
   mem_map.cpp
   mem_map_fuchsia.cpp
   mem_map_linux.cpp
+  mem_map_wos.cpp
   release.cpp
   report.cpp
   report_linux.cpp

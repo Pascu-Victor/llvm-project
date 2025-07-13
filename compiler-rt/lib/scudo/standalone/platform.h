@@ -18,6 +18,12 @@
 #define SCUDO_LINUX 0
 #endif
 
+#if defined(__WOS__)
+#define SCUDO_WOS 1
+#else
+#define SCUDO_WOS 0
+#endif
+
 // See https://android.googlesource.com/platform/bionic/+/master/docs/defines.md
 #if defined(__BIONIC__)
 #define SCUDO_ANDROID 1

@@ -15,9 +15,6 @@
 #ifndef SAFESTACK_PLATFORM_H
 #define SAFESTACK_PLATFORM_H
 
-#include "safestack_util.h"
-#include "sanitizer_common/sanitizer_platform.h"
-
 #include <dlfcn.h>
 #include <errno.h>
 #include <stdint.h>
@@ -28,19 +25,22 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "safestack_util.h"
+#include "sanitizer_common/sanitizer_platform.h"
+
 #if !(SANITIZER_NETBSD || SANITIZER_FREEBSD || SANITIZER_LINUX || \
-      SANITIZER_SOLARIS)
+      SANITIZER_SOLARIS || SANITIZER_WOS)
 #  error "Support for your platform has not been implemented"
 #endif
 
 #if SANITIZER_NETBSD
-#include <lwp.h>
+#  include <lwp.h>
 
 extern "C" void *__mmap(void *, size_t, int, int, int, int, off_t);
 #endif
 
 #if SANITIZER_FREEBSD
-#include <sys/thr.h>
+#  include <sys/thr.h>
 #endif
 
 #if SANITIZER_SOLARIS
@@ -76,13 +76,13 @@ static void *GetRealLibcAddress(const char *symbol) {
   return real;
 }
 
-#define _REAL(func, ...) real##_##func(__VA_ARGS__)
-#define DEFINE__REAL(ret_type, func, ...)                              \
-  static ret_type (*real_##func)(__VA_ARGS__) = NULL;                  \
-  if (!real_##func) {                                                  \
-    real_##func = (ret_type(*)(__VA_ARGS__))GetRealLibcAddress(#func); \
-  }                                                                    \
-  SFS_CHECK(real_##func);
+#  define _REAL(func, ...) real##_##func(__VA_ARGS__)
+#  define DEFINE__REAL(ret_type, func, ...)                               \
+    static ret_type (*real_##func)(__VA_ARGS__) = NULL;                   \
+    if (!real_##func) {                                                   \
+      real_##func = (ret_type (*)(__VA_ARGS__))GetRealLibcAddress(#func); \
+    }                                                                     \
+    SFS_CHECK(real_##func);
 #endif
 
 #if SANITIZER_SOLARIS
@@ -149,6 +149,8 @@ inline void *Mmap(void *addr, size_t length, int prot, int flags, int fd,
 #elif SANITIZER_SOLARIS
   return _REAL64(mmap)(addr, length, prot, flags, fd, offset);
 #elif SANITIZER_LINUX_USES_64BIT_SYSCALLS
+  return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+#elif SANITIZER_WOS
   return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
 #else
   // mmap2 specifies file offset in 4096-byte units.

@@ -74,11 +74,70 @@ size_t strlen(const char* s);
 
 #  if defined(__cplusplus) && !defined(_LIBCPP_STRING_H_HAS_CONST_OVERLOADS) && defined(_LIBCPP_PREFERRED_OVERLOAD)
 extern "C++" {
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD void*
+memcpy(void* __restrict__ __s1, const void* __restrict__ __s2, size_t __n) {
+  return __builtin_memcpy(__s1, __s2, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD void* memmove(void* __s1, const void* __s2, size_t __n) {
+  return __builtin_memmove(__s1, __s2, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char*
+strcpy(char* __restrict__ __s1, const char* __restrict__ __s2) {
+  return __builtin_strcpy(__s1, __s2);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char*
+strncpy(char* __restrict__ __s1, const char* __restrict__ __s2, size_t __n) {
+  return __builtin_strncpy(__s1, __s2, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char*
+strcat(char* __restrict__ __s1, const char* __restrict__ __s2) {
+  return __builtin_strcat(__s1, __s2);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char*
+strncat(char* __restrict__ __s1, const char* __restrict__ __s2, size_t __n) {
+  return __builtin_strncat(__s1, __s2, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD int memcmp(const void* __s1, const void* __s2, size_t __n) {
+  return __builtin_memcmp(__s1, __s2, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD int strcmp(const char* __s1, const char* __s2) {
+  return __builtin_strcmp(__s1, __s2);
+}
+
+// Note: The original code already had one strcmp overload. Adding the missing one if needed,
+// or adjust if the intent was different. Assuming both const/non-const first arg are desired.
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD int strcmp(char* __s1, const char* __s2) {
+  return __builtin_strcmp(const_cast<const char*>(__s1), __s2);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD int strncmp(const char* __s1, const char* __s2, size_t __n) {
+  return __builtin_strncmp(__s1, __s2, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD const void* memchr(const void* __s, int __c, size_t __n) {
+  return __builtin_memchr(__s, __c, __n);
+}
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD void* memchr(void* __s, int __c, size_t __n) {
+  return __builtin_memchr(__s, __c, __n);
+}
+
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD const char* strchr(const char* __s, int __c) {
   return __builtin_strchr(__s, __c);
 }
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char* strchr(char* __s, int __c) {
   return __builtin_strchr(__s, __c);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD size_t strcspn(const char* __s1, const char* __s2) {
+  return __builtin_strcspn(__s1, __s2);
 }
 
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD const char* strpbrk(const char* __s1, const char* __s2) {
@@ -95,11 +154,8 @@ inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char* strrchr(char* __s,
   return __builtin_strrchr(__s, __c);
 }
 
-inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD const void* memchr(const void* __s, int __c, size_t __n) {
-  return __builtin_memchr(__s, __c, __n);
-}
-inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD void* memchr(void* __s, int __c, size_t __n) {
-  return __builtin_memchr(__s, __c, __n);
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD size_t strspn(const char* __s1, const char* __s2) {
+  return __builtin_strspn(__s1, __s2);
 }
 
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD const char* strstr(const char* __s1, const char* __s2) {
@@ -108,6 +164,12 @@ inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD const char* strstr(const
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD char* strstr(char* __s1, const char* __s2) {
   return __builtin_strstr(__s1, __s2);
 }
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD void* memset(void* __s, int __c, size_t __n) {
+  return __builtin_memset(__s, __c, __n);
+}
+
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD size_t strlen(const char* __s) { return __builtin_strlen(__s); }
 } // extern "C++"
 #  endif
 #endif // defined(__cplusplus) && __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)

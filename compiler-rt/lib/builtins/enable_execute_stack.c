@@ -7,7 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "int_lib.h"
-
+#pragma message("NOT IMPLEMENTED: enable_execute_stack.c")
+/*
 #ifndef _WIN32
 #include <sys/mman.h>
 #endif
@@ -65,3 +66,5 @@ COMPILER_RT_ABI void __enable_execute_stack(void *addr) {
   (void)mprotect((void *)startPage, length, PROT_READ | PROT_WRITE | PROT_EXEC);
 #endif
 }
+#endif
+*/

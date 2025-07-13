@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "int_lib.h"
+#pragma message("NOT IMPLEMENTED: eprintf.c")
+/*
 #include <stdio.h>
 
 // __eprintf() was used in an old version of <assert.h>.
@@ -27,3 +29,4 @@ __eprintf(const char *format, const char *assertion_expression,
   compilerrt_abort();
 }
 #endif
+*/

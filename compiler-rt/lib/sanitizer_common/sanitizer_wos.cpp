@@ -942,4 +942,4 @@ bool GetRandom(void *buffer, uptr length, bool blocking) {
 
 }  // namespace __sanitizer
 
-#endif  // SANITIZER_WOS || 1
+#endif  // SANITIZER_WOS

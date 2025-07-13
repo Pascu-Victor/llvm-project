@@ -171,6 +171,9 @@ else()
           "Unsupported libc target architecture ${LIBC_TARGET_ARCHITECTURE}")
 endif()
 
+#print the target architecture and OS
+message(STATUS "libc build: Target architecture: ${LIBC_TARGET_ARCHITECTURE}")
+
 if(LIBC_TARGET_OS STREQUAL "baremetal")
   set(LIBC_TARGET_OS_IS_BAREMETAL TRUE)
 elseif(LIBC_TARGET_OS STREQUAL "linux")

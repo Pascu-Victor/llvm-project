@@ -256,7 +256,6 @@ bool copy_file_impl_copy_file_range(FileDescriptor& read_fd, FileDescriptor& wri
 
   do {
     ssize_t res;
-
     if ((res = ::copy_file_range(read_fd.fd, &off_in, write_fd.fd, &off_out, count, 0)) == -1) {
       ec = capture_errno();
       return false;

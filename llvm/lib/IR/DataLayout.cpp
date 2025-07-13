@@ -178,7 +178,7 @@ const char *DataLayout::getManglingComponent(const Triple &T) {
     return "-m:l";
   if (T.isOSBinFormatMachO())
     return "-m:o";
-  if (T.isOSWindowsOrUEFI() && T.isOSBinFormatCOFF())
+  if (T.isOSWindows() && T.isOSBinFormatCOFF())
     return T.getArch() == Triple::x86 ? "-m:x" : "-m:w";
   if (T.isOSBinFormatXCOFF())
     return "-m:a";
@@ -710,9 +710,10 @@ const StructLayout *DataLayout::getStructLayout(StructType *Ty) const {
   if (!LayoutMap)
     LayoutMap = new StructLayoutMap();
 
-  StructLayoutMap *STM = static_cast<StructLayoutMap*>(LayoutMap);
+  StructLayoutMap *STM = static_cast<StructLayoutMap *>(LayoutMap);
   StructLayout *&SL = (*STM)[Ty];
-  if (SL) return SL;
+  if (SL)
+    return SL;
 
   // Otherwise, create the struct layout.  Because it is variable length, we
   // malloc it, then use placement new.
@@ -776,7 +777,7 @@ Align DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
     unsigned AS = cast<PointerType>(Ty)->getAddressSpace();
     return abi_or_pref ? getPointerABIAlignment(AS)
                        : getPointerPrefAlignment(AS);
-    }
+  }
   case Type::ArrayTyID:
     return getAlignment(cast<ArrayType>(Ty)->getElementType(), abi_or_pref);
 
@@ -863,7 +864,8 @@ Type *DataLayout::getIntPtrType(Type *Ty) const {
   return IntTy;
 }
 
-Type *DataLayout::getSmallestLegalIntType(LLVMContext &C, unsigned Width) const {
+Type *DataLayout::getSmallestLegalIntType(LLVMContext &C,
+                                          unsigned Width) const {
   for (unsigned LegalIntWidth : LegalIntWidths)
     if (Width <= LegalIntWidth)
       return Type::getIntNTy(C, LegalIntWidth);
@@ -894,9 +896,9 @@ int64_t DataLayout::getIndexedOffsetInType(Type *ElemTy,
                                            ArrayRef<Value *> Indices) const {
   int64_t Result = 0;
 
-  generic_gep_type_iterator<Value* const*>
-    GTI = gep_type_begin(ElemTy, Indices),
-    GTE = gep_type_end(ElemTy, Indices);
+  generic_gep_type_iterator<Value *const *> GTI =
+                                                gep_type_begin(ElemTy, Indices),
+                                            GTE = gep_type_end(ElemTy, Indices);
   for (; GTI != GTE; ++GTI) {
     Value *Idx = GTI.getOperand();
     if (StructType *STy = GTI.getStructTypeOrNull()) {

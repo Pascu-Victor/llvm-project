@@ -12,7 +12,7 @@
 
 #include "sanitizer_platform.h"
 
-#if SANITIZER_WOS || 1
+#if SANITIZER_WOS
 
 #  include "sanitizer_stoptheworld.h"
 #  include "sanitizer_stoptheworld_wos.h"

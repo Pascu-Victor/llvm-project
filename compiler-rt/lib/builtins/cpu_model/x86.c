@@ -18,8 +18,8 @@
       defined(_M_X64))
 #error This file is intended only for x86-based targets
 #endif
-
-#if defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
+#pragma message("NOT IMPLEMENTED (ASSERT): cpu_model/x86.c")
+#if false && (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
 
 #include <assert.h>
 
@@ -30,7 +30,6 @@
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
-
 enum VendorSignatures {
   SIG_INTEL = 0x756e6547, // Genu
   SIG_AMD = 0x68747541,   // Auth

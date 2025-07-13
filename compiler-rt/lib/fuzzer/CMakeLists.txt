@@ -164,6 +164,7 @@ if(OS_NAME MATCHES "Android|Linux|Fuchsia" AND
                  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                  -DLIBCXXABI_ENABLE_EXCEPTIONS=OFF
                  -DLIBCXX_ABI_NAMESPACE=__Fuzzer
+                 -DLIBCXX_ENABLE_LOCALIZATION=${COMPILER_RT_LIBCXXABI_ENABLE_LOCALIZATION}
                  -DLIBCXX_ENABLE_EXCEPTIONS=OFF)
     target_compile_options(RTfuzzer.${arch} PRIVATE -isystem ${LIBCXX_${arch}_PREFIX}/include/c++/v1)
     add_dependencies(RTfuzzer.${arch} libcxx_fuzzer_${arch}-install-cmake326-workaround)

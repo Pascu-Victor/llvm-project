@@ -9,10 +9,10 @@
 #if !defined(__APPLE__) && !defined(__linux__) && !defined(__FreeBSD__) &&     \
     !defined(__Fuchsia__) && !(defined(__sun__) && defined(__svr4__)) &&       \
     !defined(__NetBSD__) && !defined(_WIN32) && !defined(_AIX) &&              \
-    !defined(__wasm__) && !defined(__HAIKU__)
+    !defined(__wasm__) && !defined(__HAIKU__) && !defined(__WOS__)
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "InstrProfiling.h"
 #include "InstrProfilingInternal.h"
@@ -113,9 +113,7 @@ COMPILER_RT_VISIBILITY
 uint32_t *__llvm_profile_begin_orderfile(void) { return OrderFileFirst; }
 
 COMPILER_RT_VISIBILITY
-ValueProfNode *__llvm_profile_begin_vnodes(void) {
-  return 0;
-}
+ValueProfNode *__llvm_profile_begin_vnodes(void) { return 0; }
 COMPILER_RT_VISIBILITY
 ValueProfNode *__llvm_profile_end_vnodes(void) { return 0; }
 

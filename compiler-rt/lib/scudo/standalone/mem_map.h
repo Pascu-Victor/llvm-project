@@ -20,9 +20,11 @@
 #include "fuchsia.h"
 #include "linux.h"
 #include "trusty.h"
+#include "wos.h"
 
 #include "mem_map_fuchsia.h"
 #include "mem_map_linux.h"
+#include "mem_map_wos.h"
 
 namespace scudo {
 
@@ -81,6 +83,9 @@ using ReservedMemoryT = ReservedMemoryFuchsia;
 using MemMapT = ReservedMemoryT::MemMapT;
 #elif SCUDO_TRUSTY
 using ReservedMemoryT = ReservedMemoryDefault;
+using MemMapT = ReservedMemoryT::MemMapT;
+#elif SCUDO_WOS
+using ReservedMemoryT = ReservedMemoryWOS;
 using MemMapT = ReservedMemoryT::MemMapT;
 #else
 #error                                                                         \
