@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/hcf.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -116,26 +117,30 @@ inline ThreadId GetTid() {
 #elif SANITIZER_SOLARIS
   return thr_self();
 #else
-  return syscall(SYS_gettid);
+#  pragma message "WARNING: GetTid() is not implemented for this platform."
+  hcf();
+//   return syscall(SYS_gettid);
 #endif
 }
 
 inline int TgKill(pid_t pid, ThreadId tid, int sig) {
-#if SANITIZER_NETBSD
-  DEFINE__REAL(int, _lwp_kill, int a, int b);
-  (void)pid;
-  return _REAL(_lwp_kill, tid, sig);
-#elif SANITIZER_SOLARIS
-  (void)pid;
-  errno = thr_kill(tid, sig);
-  // TgKill is expected to return -1 on error, not an errno.
-  return errno != 0 ? -1 : 0;
-#elif SANITIZER_FREEBSD
-  return syscall(SYS_thr_kill2, pid, tid, sig);
-#else
-  // tid is pid_t (int), not ThreadId (uint64_t).
-  return syscall(SYS_tgkill, pid, (pid_t)tid, sig);
-#endif
+#pragma message "WARNING: TgKill is not implemented for this platform."
+  hcf();
+  // #if SANITIZER_NETBSD
+  //   DEFINE__REAL(int, _lwp_kill, int a, int b);
+  //   (void)pid;
+  //   return _REAL(_lwp_kill, tid, sig);
+  // #elif SANITIZER_SOLARIS
+  //   (void)pid;
+  //   errno = thr_kill(tid, sig);
+  //   // TgKill is expected to return -1 on error, not an errno.
+  //   return errno != 0 ? -1 : 0;
+  // #elif SANITIZER_FREEBSD
+  //   return syscall(SYS_thr_kill2, pid, tid, sig);
+  // #else
+  //   // tid is pid_t (int), not ThreadId (uint64_t).
+  //   return syscall(SYS_tgkill, pid, (pid_t)tid, sig);
+  // #endif
 }
 
 inline void *Mmap(void *addr, size_t length, int prot, int flags, int fd,
@@ -151,7 +156,9 @@ inline void *Mmap(void *addr, size_t length, int prot, int flags, int fd,
 #elif SANITIZER_LINUX_USES_64BIT_SYSCALLS
   return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
 #elif SANITIZER_WOS
-  return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+#  warning "WARNING: Mmap is not implemented for WOS."
+  hcf();
+//   return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
 #else
   // mmap2 specifies file offset in 4096-byte units.
   SFS_CHECK(IsAligned(offset, 4096));
@@ -167,7 +174,9 @@ inline int Munmap(void *addr, size_t length) {
 #elif SANITIZER_SOLARIS
   return _REAL(munmap)(addr, length);
 #else
-  return syscall(SYS_munmap, addr, length);
+#  pragma message "WARNING: Munmap is not implemented for this platform."
+  hcf();
+//   return syscall(SYS_munmap, addr, length);
 #endif
 }
 
@@ -178,7 +187,9 @@ inline int Mprotect(void *addr, size_t length, int prot) {
 #elif SANITIZER_SOLARIS
   return _REAL(mprotect)(addr, length, prot);
 #else
-  return syscall(SYS_mprotect, addr, length, prot);
+#  pragma message "WARNING: Mprotect is not implemented for this platform."
+  hcf();
+//   return syscall(SYS_mprotect, addr, length, prot);
 #endif
 }
 
