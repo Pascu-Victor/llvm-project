@@ -2,6 +2,7 @@
 
 set(INTERCEPTION_SOURCES
   interception_linux.cpp
+  interception_wos.cpp
   interception_mac.cpp
   interception_win.cpp
   interception_type_test.cpp
@@ -10,6 +11,7 @@ set(INTERCEPTION_SOURCES
 set(INTERCEPTION_HEADERS
   interception.h
   interception_linux.h
+  interception_wos.h
   interception_mac.h
   interception_win.h
   )
