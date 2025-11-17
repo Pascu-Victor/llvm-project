@@ -13,6 +13,7 @@
 #define LLVM_CLANG_LIB_BASIC_TARGETS_OSTARGETS_H
 
 #include "Targets.h"
+#include <iostream>
 
 namespace clang {
 namespace targets {
@@ -336,8 +337,16 @@ public:
     default:
       break;
     case llvm::Triple::x86:
+      this->HasFloat128 = true;
+      this->LongDoubleFormat = &llvm::APFloat::x87DoubleExtended();
+      this->LongDoubleWidth = 96;
+      this->LongDoubleAlign = 32;
+      break;
     case llvm::Triple::x86_64:
       this->HasFloat128 = true;
+      this->LongDoubleFormat = &llvm::APFloat::x87DoubleExtended();
+      this->LongDoubleWidth = 128;
+      this->LongDoubleAlign = 128;
       break;
     }
   }

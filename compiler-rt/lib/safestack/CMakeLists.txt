@@ -1,3 +1,5 @@
+# SafeStack disabled for WOS target
+if(NOT WOS)
 add_compiler_rt_component(safestack)
 
 set(SAFESTACK_SOURCES
@@ -22,3 +24,4 @@ foreach(arch ${SAFESTACK_SUPPORTED_ARCH})
     CFLAGS ${SAFESTACK_CFLAGS}
     PARENT_TARGET safestack)
 endforeach()
+endif()
