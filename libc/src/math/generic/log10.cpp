@@ -18,8 +18,8 @@
 #include "src/__support/macros/config.h"
 #include "src/__support/macros/optimization.h" // LIBC_UNLIKELY
 
-#include "common_constants.h"
 #include "log_range_reduction.h"
+#include "src/__support/math/common_constants.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
@@ -29,6 +29,8 @@ using Float128 = typename fputil::DyadicFloat<128>;
 using LIBC_NAMESPACE::operator""_u128;
 
 namespace {
+
+using namespace common_constants_internal;
 
 constexpr fputil::DoubleDouble LOG10_E = {0x1.95355baaafad3p-57,
                                           0x1.bcb7b1526e50ep-2};
@@ -739,6 +741,7 @@ double log10_accurate(int e_x, int index, double m_x) {
 } // namespace
 
 LLVM_LIBC_FUNCTION(double, log10, (double x)) {
+  using namespace common_constants_internal;
   using FPBits_t = typename fputil::FPBits<double>;
 
   FPBits_t xbits(x);
@@ -802,13 +805,13 @@ LLVM_LIBC_FUNCTION(double, log10, (double x)) {
   fputil::DoubleDouble r1;
 
   // Perform exact range reduction
-#ifdef LIBC_TARGET_CPU_HAS_FMA
+#ifdef LIBC_TARGET_CPU_HAS_FMA_DOUBLE
   u = fputil::multiply_add(r, m, -1.0); // exact
 #else
   uint64_t c_m = x_m & 0x3FFF'E000'0000'0000ULL;
   double c = FPBits_t(c_m).get_val();
   u = fputil::multiply_add(r, m - c, CD[index]); // exact
-#endif // LIBC_TARGET_CPU_HAS_FMA
+#endif // LIBC_TARGET_CPU_HAS_FMA_DOUBLE
 
   // Error of u_sq = ulp(u^2);
   u_sq = u * u;

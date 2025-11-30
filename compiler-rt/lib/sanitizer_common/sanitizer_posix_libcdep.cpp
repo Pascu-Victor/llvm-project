@@ -44,9 +44,11 @@
 #    define MAP_NORESERVE 0
 #  endif
 
-typedef void (*sa_sigaction_t)(int, siginfo_t *, void *);
+typedef void (*sa_sigaction_t)(int, siginfo_t*, void*);
 
 namespace __sanitizer {
+
+[[maybe_unused]] static atomic_uint8_t signal_handler_is_from_sanitizer[64];
 
 u32 GetUid() { return getuid(); }
 
@@ -168,7 +170,7 @@ int Atexit(void (*function)(void)) {
 #  endif
 }
 
-bool CreateDir(const char *pathname) { return mkdir(pathname, 0755) == 0; }
+bool CreateDir(const char* pathname) { return mkdir(pathname, 0755) == 0; }
 
 bool SupportsColoredOutput(fd_t fd) { return isatty(fd) != 0; }
 
@@ -192,7 +194,7 @@ void SetAlternateSignalStack() {
   // future. It is not required by man 2 sigaltstack now (they're using
   // malloc()).
   altstack.ss_size = GetAltStackSize();
-  altstack.ss_sp = (char *)MmapOrDie(altstack.ss_size, __func__);
+  altstack.ss_sp = (char*)MmapOrDie(altstack.ss_size, __func__);
   altstack.ss_flags = 0;
   CHECK_EQ(0, sigaltstack(&altstack, nullptr));
 }
@@ -204,6 +206,20 @@ void UnsetAlternateSignalStack() {
   altstack.ss_size = GetAltStackSize();  // Some sane value required on Darwin.
   CHECK_EQ(0, sigaltstack(&altstack, &oldstack));
   UnmapOrDie(oldstack.ss_sp, oldstack.ss_size);
+}
+
+bool IsSignalHandlerFromSanitizer(int signum) {
+  return atomic_load(&signal_handler_is_from_sanitizer[signum],
+                     memory_order_relaxed);
+}
+
+bool SetSignalHandlerFromSanitizer(int signum, bool new_state) {
+  if (signum < 0 || static_cast<unsigned>(signum) >=
+                        ARRAY_SIZE(signal_handler_is_from_sanitizer))
+    return false;
+
+  return atomic_exchange(&signal_handler_is_from_sanitizer[signum], new_state,
+                         memory_order_relaxed);
 }
 
 static void MaybeInstallSigaction(int signum, SignalHandlerType handler) {
@@ -220,6 +236,9 @@ static void MaybeInstallSigaction(int signum, SignalHandlerType handler) {
     sigact.sa_flags |= SA_ONSTACK;
   CHECK_EQ(0, internal_sigaction(signum, &sigact, nullptr));
   VReport(1, "Installed the sigaction for signal %d\n", signum);
+
+  if (common_flags()->cloak_sanitizer_signal_handlers)
+    SetSignalHandlerFromSanitizer(signum, true);
 }
 
 void InstallDeadlySignalHandlers(SignalHandlerType handler) {
@@ -259,7 +278,7 @@ bool SignalContext::IsStackOverflow() const {
   // will not work, because the fault address will be more than just "slightly"
   // below sp.
   if (!IsStackAccess && IsAccessibleMemoryRange(pc, 4)) {
-    u32 inst = *(unsigned *)pc;
+    u32 inst = *(unsigned*)pc;
     u32 ra = (inst >> 16) & 0x1F;
     u32 opcd = inst >> 26;
     u32 xo = (inst >> 1) & 0x3FF;
@@ -279,7 +298,7 @@ bool SignalContext::IsStackOverflow() const {
   // We also check si_code to filter out SEGV caused by something else other
   // then hitting the guard page or unmapped memory, like, for example,
   // unaligned memory access.
-  auto si = static_cast<const siginfo_t *>(siginfo);
+  auto si = static_cast<const siginfo_t*>(siginfo);
   return IsStackAccess &&
          (si->si_code == si_SEGV_MAPERR || si->si_code == si_SEGV_ACCERR);
 }
@@ -310,7 +329,7 @@ bool IsAccessibleMemoryRange(uptr beg, uptr size) {
     SetNonBlock(fds[1]);
 
     int write_errno;
-    uptr w = internal_write(fds[1], reinterpret_cast<char *>(beg), size);
+    uptr w = internal_write(fds[1], reinterpret_cast<char*>(beg), size);
     if (internal_iserror(w, &write_errno)) {
       if (write_errno == EINTR)
         continue;
@@ -324,7 +343,7 @@ bool IsAccessibleMemoryRange(uptr beg, uptr size) {
   return true;
 }
 
-bool TryMemCpy(void *dest, const void *src, uptr n) {
+bool TryMemCpy(void* dest, const void* src, uptr n) {
   if (!n)
     return true;
   int fds[2];
@@ -338,8 +357,8 @@ bool TryMemCpy(void *dest, const void *src, uptr n) {
   SetNonBlock(fds[0]);
   SetNonBlock(fds[1]);
 
-  char *d = static_cast<char *>(dest);
-  const char *s = static_cast<const char *>(src);
+  char* d = static_cast<char*>(dest);
+  const char* s = static_cast<const char*>(src);
 
   while (n) {
     int e;
@@ -368,7 +387,7 @@ bool TryMemCpy(void *dest, const void *src, uptr n) {
   return true;
 }
 
-void PlatformPrepareForSandboxing(void *args) {
+void PlatformPrepareForSandboxing(void* args) {
   // Some kinds of sandboxes may forbid filesystem access, so we won't be able
   // to read the file mappings from /proc/self/maps. Luckily, neither the
   // process will be able to load additional libraries, so it's fine to use the
@@ -377,29 +396,29 @@ void PlatformPrepareForSandboxing(void *args) {
 }
 
 static bool MmapFixed(uptr fixed_addr, uptr size, int additional_flags,
-                      const char *name) {
+                      const char* name) {
   size = RoundUpTo(size, GetPageSizeCached());
   fixed_addr = RoundDownTo(fixed_addr, GetPageSizeCached());
   uptr p =
-      MmapNamed((void *)fixed_addr, size, PROT_READ | PROT_WRITE,
+      MmapNamed((void*)fixed_addr, size, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_FIXED | additional_flags | MAP_ANON, name);
   int reserrno;
   if (internal_iserror(p, &reserrno)) {
     Report(
         "ERROR: %s failed to "
         "allocate 0x%zx (%zd) bytes at address %p (errno: %d)\n",
-        SanitizerToolName, size, size, (void *)fixed_addr, reserrno);
+        SanitizerToolName, size, size, (void*)fixed_addr, reserrno);
     return false;
   }
   IncreaseTotalMmap(size);
   return true;
 }
 
-bool MmapFixedNoReserve(uptr fixed_addr, uptr size, const char *name) {
+bool MmapFixedNoReserve(uptr fixed_addr, uptr size, const char* name) {
   return MmapFixed(fixed_addr, size, MAP_NORESERVE, name);
 }
 
-bool MmapFixedSuperNoReserve(uptr fixed_addr, uptr size, const char *name) {
+bool MmapFixedSuperNoReserve(uptr fixed_addr, uptr size, const char* name) {
 #  if SANITIZER_FREEBSD
   if (common_flags()->no_huge_pages_for_shadow)
     return MmapFixedNoReserve(fixed_addr, size, name);
@@ -413,7 +432,7 @@ bool MmapFixedSuperNoReserve(uptr fixed_addr, uptr size, const char *name) {
 #  endif
 }
 
-uptr ReservedAddressRange::Init(uptr size, const char *name, uptr fixed_addr) {
+uptr ReservedAddressRange::Init(uptr size, const char* name, uptr fixed_addr) {
   base_ = fixed_addr ? MmapFixedNoAccess(fixed_addr, size, name)
                      : MmapNoAccess(size);
   size_ = size;
@@ -424,13 +443,13 @@ uptr ReservedAddressRange::Init(uptr size, const char *name, uptr fixed_addr) {
 
 // Uses fixed_addr for now.
 // Will use offset instead once we've implemented this function for real.
-uptr ReservedAddressRange::Map(uptr fixed_addr, uptr size, const char *name) {
+uptr ReservedAddressRange::Map(uptr fixed_addr, uptr size, const char* name) {
   return reinterpret_cast<uptr>(
       MmapFixedOrDieOnFatalError(fixed_addr, size, name));
 }
 
 uptr ReservedAddressRange::MapOrDie(uptr fixed_addr, uptr size,
-                                    const char *name) {
+                                    const char* name) {
   return reinterpret_cast<uptr>(MmapFixedOrDie(fixed_addr, size, name));
 }
 
@@ -438,45 +457,45 @@ void ReservedAddressRange::Unmap(uptr addr, uptr size) {
   CHECK_LE(size, size_);
   if (addr == reinterpret_cast<uptr>(base_))
     // If we unmap the whole range, just null out the base.
-    base_ = (size == size_) ? nullptr : reinterpret_cast<void *>(addr + size);
+    base_ = (size == size_) ? nullptr : reinterpret_cast<void*>(addr + size);
   else
     CHECK_EQ(addr + size, reinterpret_cast<uptr>(base_) + size_);
   size_ -= size;
-  UnmapOrDie(reinterpret_cast<void *>(addr), size);
+  UnmapOrDie(reinterpret_cast<void*>(addr), size);
 }
 
-void *MmapFixedNoAccess(uptr fixed_addr, uptr size, const char *name) {
-  return (void *)MmapNamed((void *)fixed_addr, size, PROT_NONE,
-                           MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE | MAP_ANON,
-                           name);
+void* MmapFixedNoAccess(uptr fixed_addr, uptr size, const char* name) {
+  return (void*)MmapNamed((void*)fixed_addr, size, PROT_NONE,
+                          MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE | MAP_ANON,
+                          name);
 }
 
-void *MmapNoAccess(uptr size) {
+void* MmapNoAccess(uptr size) {
   unsigned flags = MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
-  return (void *)internal_mmap(nullptr, size, PROT_NONE, flags, -1, 0);
+  return (void*)internal_mmap(nullptr, size, PROT_NONE, flags, -1, 0);
 }
 
 // This function is defined elsewhere if we intercepted pthread_attr_getstack.
 extern "C" {
-SANITIZER_WEAK_ATTRIBUTE int real_pthread_attr_getstack(void *attr, void **addr,
-                                                        size_t *size);
+SANITIZER_WEAK_ATTRIBUTE int real_pthread_attr_getstack(void* attr, void** addr,
+                                                        size_t* size);
 }  // extern "C"
 
-int internal_pthread_attr_getstack(void *attr, void **addr, uptr *size) {
+int internal_pthread_attr_getstack(void* attr, void** addr, uptr* size) {
 #  if !SANITIZER_GO && !SANITIZER_APPLE
   if (&real_pthread_attr_getstack)
-    return real_pthread_attr_getstack((pthread_attr_t *)attr, addr,
-                                      (size_t *)size);
+    return real_pthread_attr_getstack((pthread_attr_t*)attr, addr,
+                                      (size_t*)size);
 #  endif
-  return pthread_attr_getstack((pthread_attr_t *)attr, addr, (size_t *)size);
+  return pthread_attr_getstack((pthread_attr_t*)attr, addr, (size_t*)size);
 }
 
 #  if !SANITIZER_GO
-void AdjustStackSize(void *attr_) {
-  pthread_attr_t *attr = (pthread_attr_t *)attr_;
+void AdjustStackSize(void* attr_) {
+  pthread_attr_t* attr = (pthread_attr_t*)attr_;
   uptr stackaddr = 0;
   uptr stacksize = 0;
-  internal_pthread_attr_getstack(attr, (void **)&stackaddr, &stacksize);
+  internal_pthread_attr_getstack(attr, (void**)&stackaddr, &stacksize);
   // GLibC will return (0 - stacksize) as the stack address in the case when
   // stacksize is set, but stackaddr is not.
   bool stack_set = (stackaddr != 0) && (stackaddr + stacksize != 0);
@@ -500,8 +519,8 @@ void AdjustStackSize(void *attr_) {
 }
 #  endif  // !SANITIZER_GO
 
-pid_t StartSubprocess(const char *program, const char *const argv[],
-                      const char *const envp[], fd_t stdin_fd, fd_t stdout_fd,
+pid_t StartSubprocess(const char* program, const char* const argv[],
+                      const char* const envp[], fd_t stdin_fd, fd_t stdout_fd,
                       fd_t stderr_fd) {
   auto file_closer = at_scope_exit([&] {
     if (stdin_fd != kInvalidFd) {
@@ -549,8 +568,8 @@ pid_t StartSubprocess(const char *program, const char *const argv[],
     for (int fd = sysconf(_SC_OPEN_MAX); fd > 2; fd--) internal_close(fd);
 #  endif
 
-    internal_execve(program, const_cast<char **>(&argv[0]),
-                    const_cast<char *const *>(envp));
+    internal_execve(program, const_cast<char**>(&argv[0]),
+                    const_cast<char* const*>(envp));
     internal__exit(1);
   }
 

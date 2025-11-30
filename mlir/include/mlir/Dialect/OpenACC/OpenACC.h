@@ -29,6 +29,7 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include <variant>
 
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/OpenACC/OpenACCOpsTypes.h.inc"
@@ -45,10 +46,10 @@
   mlir::acc::CopyinOp, mlir::acc::CreateOp, mlir::acc::PresentOp,              \
       mlir::acc::NoCreateOp, mlir::acc::AttachOp, mlir::acc::DevicePtrOp,      \
       mlir::acc::GetDevicePtrOp, mlir::acc::PrivateOp,                         \
-      mlir::acc::FirstprivateOp, mlir::acc::UpdateDeviceOp,                    \
-      mlir::acc::UseDeviceOp, mlir::acc::ReductionOp,                          \
-      mlir::acc::DeclareDeviceResidentOp, mlir::acc::DeclareLinkOp,            \
-      mlir::acc::CacheOp
+      mlir::acc::FirstprivateOp, mlir::acc::FirstprivateMapInitialOp,          \
+      mlir::acc::UpdateDeviceOp, mlir::acc::UseDeviceOp,                       \
+      mlir::acc::ReductionOp, mlir::acc::DeclareDeviceResidentOp,              \
+      mlir::acc::DeclareLinkOp, mlir::acc::CacheOp
 #define ACC_DATA_EXIT_OPS                                                      \
   mlir::acc::CopyoutOp, mlir::acc::DeleteOp, mlir::acc::DetachOp,              \
       mlir::acc::UpdateHostOp
@@ -58,11 +59,10 @@
 #define ACC_COMPUTE_CONSTRUCT_AND_LOOP_OPS                                     \
   ACC_COMPUTE_CONSTRUCT_OPS, mlir::acc::LoopOp
 #define ACC_DATA_CONSTRUCT_STRUCTURED_OPS                                      \
-  mlir::acc::DataOp, mlir::acc::DeclareOp
+  mlir::acc::DataOp, mlir::acc::DeclareOp, mlir::acc::HostDataOp
 #define ACC_DATA_CONSTRUCT_UNSTRUCTURED_OPS                                    \
   mlir::acc::EnterDataOp, mlir::acc::ExitDataOp, mlir::acc::UpdateOp,          \
-      mlir::acc::HostDataOp, mlir::acc::DeclareEnterOp,                        \
-      mlir::acc::DeclareExitOp
+      mlir::acc::DeclareEnterOp, mlir::acc::DeclareExitOp
 #define ACC_DATA_CONSTRUCT_OPS                                                 \
   ACC_DATA_CONSTRUCT_STRUCTURED_OPS, ACC_DATA_CONSTRUCT_UNSTRUCTURED_OPS
 #define ACC_COMPUTE_AND_DATA_CONSTRUCT_OPS                                     \
@@ -152,6 +152,9 @@ mlir::ValueRange getDataOperands(mlir::Operation *accOp);
 /// Used to get a mutable range iterating over the data operands.
 mlir::MutableOperandRange getMutableDataOperands(mlir::Operation *accOp);
 
+/// Used to get the recipe attribute from a data clause operation.
+mlir::SymbolRefAttr getRecipe(mlir::Operation *accOp);
+
 /// Used to check whether the provided `type` implements the `PointerLikeType`
 /// interface.
 inline bool isPointerLikeType(mlir::Type type) {
@@ -175,6 +178,19 @@ static constexpr StringLiteral getDeclareActionAttrName() {
 
 static constexpr StringLiteral getRoutineInfoAttrName() {
   return StringLiteral("acc.routine_info");
+}
+
+/// Used to check whether the current operation is an `acc routine`
+inline bool isAccRoutineOp(mlir::Operation *op) {
+  return op->hasAttr(mlir::acc::getRoutineInfoAttrName());
+}
+
+static constexpr StringLiteral getFromDefaultClauseAttrName() {
+  return StringLiteral("acc.from_default");
+}
+
+static constexpr StringLiteral getVarNameAttrName() {
+  return VarNameAttr::name;
 }
 
 static constexpr StringLiteral getCombinedConstructsAttrName() {

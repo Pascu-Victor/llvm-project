@@ -16,7 +16,8 @@
 #include "sanitizer_platform.h"
 
 #if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD || \
-    SANITIZER_APPLE || SANITIZER_SOLARIS || SANITIZER_FUCHSIA || SANITIZER_WOS
+    SANITIZER_APPLE || SANITIZER_SOLARIS || SANITIZER_HAIKU ||  \
+    SANITIZER_FUCHSIA || SANITIZER_WOS
 
 #  include "sanitizer_common.h"
 #  include "sanitizer_fuchsia.h"
@@ -38,7 +39,7 @@ struct MemoryMappedSegmentData;
 
 class MemoryMappedSegment {
  public:
-  explicit MemoryMappedSegment(char *buff = nullptr, uptr size = 0)
+  explicit MemoryMappedSegment(char* buff = nullptr, uptr size = 0)
       : filename(buff), filename_size(size), data_(nullptr) {}
   ~MemoryMappedSegment() {}
 
@@ -47,12 +48,12 @@ class MemoryMappedSegment {
   bool IsExecutable() const { return protection & kProtectionExecute; }
   bool IsShared() const { return protection & kProtectionShared; }
 
-  void AddAddressRanges(LoadedModule *module);
+  void AddAddressRanges(LoadedModule* module);
 
   uptr start;
   uptr end;
   uptr offset;
-  char *filename;  // owned by caller
+  char* filename;  // owned by caller
   uptr filename_size;
   uptr protection;
   ModuleArch arch;
@@ -62,14 +63,14 @@ class MemoryMappedSegment {
   friend class MemoryMappingLayout;
 
   // This field is assigned and owned by MemoryMappingLayout if needed
-  MemoryMappedSegmentData *data_;
+  MemoryMappedSegmentData* data_;
 };
 
 struct ImageHeader;
 
 class MemoryMappingLayoutBase {
  public:
-  virtual bool Next(MemoryMappedSegment *segment) { UNIMPLEMENTED(); }
+  virtual bool Next(MemoryMappedSegment* segment) { UNIMPLEMENTED(); }
   virtual bool Error() const { UNIMPLEMENTED(); };
   virtual void Reset() { UNIMPLEMENTED(); }
 
@@ -93,7 +94,7 @@ class MemoryMappingLayout : public MemoryMappingLayoutBase {
 #    pragma clang diagnostic pop
 #  endif
 
-  virtual bool Next(MemoryMappedSegment *segment) override;
+  virtual bool Next(MemoryMappedSegment* segment) override;
   virtual bool Error() const override;
   virtual void Reset() override;
   // In some cases, e.g. when running under a sandbox on Linux, ASan is unable
@@ -102,11 +103,11 @@ class MemoryMappingLayout : public MemoryMappingLayoutBase {
   static void CacheMemoryMappings();
 
   // Adds all mapped objects into a vector.
-  void DumpListOfModules(InternalMmapVectorNoCtor<LoadedModule> *modules);
+  void DumpListOfModules(InternalMmapVectorNoCtor<LoadedModule>* modules);
 
  protected:
 #  if SANITIZER_APPLE
-  virtual const ImageHeader *CurrentImageHeader();
+  virtual const ImageHeader* CurrentImageHeader();
 #  endif
   MemoryMappingLayoutData data_;
 
@@ -115,12 +116,12 @@ class MemoryMappingLayout : public MemoryMappingLayoutBase {
 };
 
 // Returns code range for the specified module.
-bool GetCodeRangeForFile(const char *module, uptr *start, uptr *end);
+bool GetCodeRangeForFile(const char* module, uptr* start, uptr* end);
 
 bool IsDecimal(char c);
-uptr ParseDecimal(const char **p);
+uptr ParseDecimal(const char** p);
 bool IsHex(char c);
-uptr ParseHex(const char **p);
+uptr ParseHex(const char** p);
 
 }  // namespace __sanitizer
 

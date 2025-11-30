@@ -18,8 +18,8 @@
 #include "src/__support/macros/config.h"
 #include "src/__support/macros/optimization.h" // LIBC_UNLIKELY
 
-#include "common_constants.h"
 #include "log_range_reduction.h"
+#include "src/__support/math/common_constants.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
@@ -29,6 +29,8 @@ using Float128 = typename fputil::DyadicFloat<128>;
 using LIBC_NAMESPACE::operator""_u128;
 
 namespace {
+
+using namespace common_constants_internal;
 
 #ifndef LIBC_MATH_HAS_SKIP_ACCURATE_PASS
 // A simple upper bound for the error of e_x * log(2) - log(r).
@@ -800,13 +802,13 @@ LLVM_LIBC_FUNCTION(double, log, (double x)) {
   fputil::DoubleDouble r1;
 
   // Perform exact range reduction
-#ifdef LIBC_TARGET_CPU_HAS_FMA
+#ifdef LIBC_TARGET_CPU_HAS_FMA_DOUBLE
   u = fputil::multiply_add(r, m, -1.0); // exact
 #else
   uint64_t c_m = x_m & 0x3FFF'E000'0000'0000ULL;
   double c = FPBits_t(c_m).get_val();
   u = fputil::multiply_add(r, m - c, CD[index]); // exact
-#endif // LIBC_TARGET_CPU_HAS_FMA
+#endif // LIBC_TARGET_CPU_HAS_FMA_DOUBLE
 
   // Exact sum:
   //   r1.hi + r1.lo = e_x * log(2)_hi - log(r)_hi + u

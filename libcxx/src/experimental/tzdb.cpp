@@ -715,6 +715,14 @@ void __init_tzdb(tzdb& __tzdb, __tz::__rules_storage_type& __rules) {
   //
   // - The time zone name is the target of the symlink /etc/localtime
   //   relative to /usr/share/zoneinfo/
+  //
+  // - The file /etc/timezone. This text file contains the name of the time
+  //   zone.
+  //
+  // On Linux systems it seems /etc/timezone is deprecated and being phased out.
+  // This file is used when /etc/localtime does not exist, or when it exists but
+  // is not a symlink. For more information and links see
+  // https://llvm.org/PR105634
 
   // The algorithm is like this:
   // - If the environment variable TZ is set and points to a valid

@@ -137,6 +137,8 @@ void int_to_float() {
   Agg<float> f7 = {12345678};  // OK (exactly fits in a float)
   Agg<float> f8 = {EnumVal};  // OK
   Agg<float> f9 = {123456789};  // expected-error {{ cannot be narrowed }} expected-note {{silence}}
+  Agg<float> f10 = {2147483646}; // expected-error {{constant expression evaluates to 2147483646 which cannot be narrowed to type 'float'}} expected-note {{silence}}
+  Agg<float> f11 = {2147483647}; // expected-error {{constant expression evaluates to 2147483647 which cannot be narrowed to type 'float'}} expected-note {{silence}}
 
   Agg<float> ce1 = { Convert<int>(123456789) }; // expected-error {{constant expression evaluates to 123456789 which cannot be narrowed to type 'float'}} expected-note {{silence}}
   Agg<double> ce2 = { ConvertVar<long long>() }; // expected-error {{non-constant-expression cannot be narrowed from type 'long long' to 'double'}} expected-note {{silence}}
@@ -251,5 +253,5 @@ void P1957R2(void *a, int *b, Agg<int> *c, int Agg<int>::*d) {
   Agg<bool> tc = {c}; // expected-error {{cannot be narrowed}} expected-note {{}}
   Agg<bool> td = {d}; // expected-error {{cannot be narrowed}} expected-note {{}}
 }
-template<bool> struct BoolParam {}; // expected-note {{template parameter is declared here}}
+template<bool> struct BoolParam {};
 BoolParam<&P1957R2> bp; // expected-error {{not allowed in a converted constant expression}}

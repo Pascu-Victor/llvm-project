@@ -56,17 +56,24 @@ namespace __asan {
 #  define ASAN_READ_STRING(ctx, s, n) \
     ASAN_READ_STRING_OF_LEN((ctx), (s), internal_strlen(s), (n))
 
-static inline uptr MaybeRealStrnlen(const char *s, uptr maxlen) {
+static inline uptr MaybeRealStrnlen(const char* s, uptr maxlen) {
 #  if SANITIZER_INTERCEPT_STRNLEN
-  if (REAL(strnlen)) {
+  if (static_cast<bool>(REAL(strnlen)))
     return REAL(strnlen)(s, maxlen);
-  }
 #  endif
   return internal_strnlen(s, maxlen);
 }
 
-void SetThreadName(const char *name) {
-  AsanThread *t = GetCurrentThread();
+static inline uptr MaybeRealWcsnlen(const wchar_t* s, uptr maxlen) {
+#  if SANITIZER_INTERCEPT_WCSNLEN
+  if (static_cast<bool>(REAL(wcsnlen)))
+    return REAL(wcsnlen)(s, maxlen);
+#  endif
+  return internal_wcsnlen(s, maxlen);
+}
+
+void SetThreadName(const char* name) {
+  AsanThread* t = GetCurrentThread();
   if (t)
     asanThreadRegistry().SetThreadName(t->tid(), name);
 }
@@ -85,8 +92,8 @@ int OnExit() {
 // ---------------------- Wrappers ---------------- {{{1
 using namespace __asan;
 
-DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, usize)
-DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
+DECLARE_REAL_AND_INTERCEPTOR(void*, malloc, usize)
+DECLARE_REAL_AND_INTERCEPTOR(void, free, void*)
 
 #  define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
     ASAN_INTERCEPT_FUNC_VER(name, ver)
@@ -142,7 +149,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()
 #  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!AsanInited())
 #  define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end) \
-    if (AsanThread *t = GetCurrentThread()) {          \
+    if (AsanThread* t = GetCurrentThread()) {          \
       *begin = t->tls_begin();                         \
       *end = t->tls_end();                             \
     } else {                                           \
@@ -150,10 +157,10 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     }
 
 template <class Mmap>
-static void *mmap_interceptor(Mmap real_mmap, void *addr, SIZE_T length,
+static void* mmap_interceptor(Mmap real_mmap, void* addr, SIZE_T length,
                               int prot, int flags, int fd, OFF64_T offset) {
-  void *res = real_mmap(addr, length, prot, flags, fd, offset);
-  if (length && res != (void *)-1) {
+  void* res = real_mmap(addr, length, prot, flags, fd, offset);
+  if (length && res != (void*)-1) {
     const uptr beg = reinterpret_cast<uptr>(res);
     DCHECK(IsAligned(beg, GetPageSize()));
     SIZE_T rounded_length = RoundUpTo(length, GetPageSize());
@@ -165,7 +172,7 @@ static void *mmap_interceptor(Mmap real_mmap, void *addr, SIZE_T length,
 }
 
 template <class Munmap>
-static int munmap_interceptor(Munmap real_munmap, void *addr, SIZE_T length) {
+static int munmap_interceptor(Munmap real_munmap, void* addr, SIZE_T length) {
   // We should not tag if munmap fail, but it's to late to tag after
   // real_munmap, as the pages could be mmaped by another thread.
   const uptr beg = reinterpret_cast<uptr>(addr);
@@ -222,8 +229,8 @@ static int munmap_interceptor(Munmap real_munmap, void *addr, SIZE_T length) {
 #  include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
 
 #  if ASAN_INTERCEPT_PTHREAD_CREATE
-static thread_return_t THREAD_CALLING_CONV asan_thread_start(void *arg) {
-  AsanThread *t = (AsanThread *)arg;
+static thread_return_t THREAD_CALLING_CONV asan_thread_start(void* arg) {
+  AsanThread* t = (AsanThread*)arg;
   SetCurrentThread(t);
   auto self = GetThreadSelf();
   auto args = asanThreadArgRetval().GetArgs(self);
@@ -241,8 +248,8 @@ static thread_return_t THREAD_CALLING_CONV asan_thread_start(void *arg) {
   return retval;
 }
 
-INTERCEPTOR(int, pthread_create, void *thread, void *attr,
-            void *(*start_routine)(void *), void *arg) {
+INTERCEPTOR(int, pthread_create, void* thread, void* attr,
+            void* (*start_routine)(void*), void* arg) {
   EnsureMainThreadIDIsCorrect();
   // Strict init-order checking is thread-hostile.
   if (flags()->strict_init_order)
@@ -262,7 +269,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   ScopedBlockSignals block(&sigset);
 #    endif
 
-  AsanThread *t = AsanThread::Create(sigset, current_tid, &stack, detached);
+  AsanThread* t = AsanThread::Create(sigset, current_tid, &stack, detached);
 
   int result;
   {
@@ -275,7 +282,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 #    endif
     asanThreadArgRetval().Create(detached, {start_routine, arg}, [&]() -> uptr {
       result = REAL(pthread_create)(thread, attr, asan_thread_start, t);
-      return result ? 0 : *(uptr *)(thread);
+      return result ? 0 : *(uptr*)(thread);
     });
   }
   if (result != 0) {
@@ -287,7 +294,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   return result;
 }
 
-INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
+INTERCEPTOR(int, pthread_join, void* thread, void** retval) {
   int result;
   asanThreadArgRetval().Join((uptr)thread, [&]() {
     result = REAL(pthread_join)(thread, retval);
@@ -296,7 +303,7 @@ INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
   return result;
 }
 
-INTERCEPTOR(int, pthread_detach, void *thread) {
+INTERCEPTOR(int, pthread_detach, void* thread) {
   int result;
   asanThreadArgRetval().Detach((uptr)thread, [&]() {
     result = REAL(pthread_detach)(thread);
@@ -305,13 +312,13 @@ INTERCEPTOR(int, pthread_detach, void *thread) {
   return result;
 }
 
-INTERCEPTOR(void, pthread_exit, void *retval) {
+INTERCEPTOR(void, pthread_exit, void* retval) {
   asanThreadArgRetval().Finish(GetThreadSelf(), retval);
   REAL(pthread_exit)(retval);
 }
 
 #    if ASAN_INTERCEPT_TRYJOIN
-INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **ret) {
+INTERCEPTOR(int, pthread_tryjoin_np, void* thread, void** ret) {
   int result;
   asanThreadArgRetval().Join((uptr)thread, [&]() {
     result = REAL(pthread_tryjoin_np)(thread, ret);
@@ -322,8 +329,8 @@ INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **ret) {
 #    endif
 
 #    if ASAN_INTERCEPT_TIMEDJOIN
-INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **ret,
-            const struct timespec *abstime) {
+INTERCEPTOR(int, pthread_timedjoin_np, void* thread, void** ret,
+            const struct timespec* abstime) {
   int result;
   asanThreadArgRetval().Join((uptr)thread, [&]() {
     result = REAL(pthread_timedjoin_np)(thread, ret, abstime);
@@ -356,10 +363,10 @@ static void ClearShadowMemoryForContextStack(uptr stack, uptr ssize) {
 // as on other targets.  For binary compatibility, the new version uses a
 // different external name, so we intercept that.
 #    if SANITIZER_SOLARIS && defined(__sparc__)
-INTERCEPTOR(void, __makecontext_v2, struct ucontext_t *ucp, void (*func)(),
+INTERCEPTOR(void, __makecontext_v2, struct ucontext_t* ucp, void (*func)(),
             int argc, ...) {
 #    else
-INTERCEPTOR(void, makecontext, struct ucontext_t *ucp, void (*func)(), int argc,
+INTERCEPTOR(void, makecontext, struct ucontext_t* ucp, void (*func)(), int argc,
             ...) {
 #    endif
   va_list ap;
@@ -386,7 +393,7 @@ INTERCEPTOR(void, makecontext, struct ucontext_t *ucp, void (*func)(), int argc,
 #    else
   REAL(makecontext)
 #    endif
-      ((struct ucontext_t *)ucp, func, argc, ENUMERATE_ARRAY_64());
+      ((struct ucontext_t*)ucp, func, argc, ENUMERATE_ARRAY_64());
 
 #    undef ENUMERATE_ARRAY_4
 #    undef ENUMERATE_ARRAY_16
@@ -396,7 +403,7 @@ INTERCEPTOR(void, makecontext, struct ucontext_t *ucp, void (*func)(), int argc,
   SignContextStack(ucp);
 }
 
-INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
+INTERCEPTOR(int, swapcontext, struct ucontext_t* oucp, struct ucontext_t* ucp) {
   static bool reported_warning = false;
   if (!reported_warning) {
     Report(
@@ -412,7 +419,7 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
 
 #    if __has_attribute(__indirect_return__) && \
         (defined(__x86_64__) || defined(__i386__))
-  int (*real_swapcontext)(struct ucontext_t *, struct ucontext_t *)
+  int (*real_swapcontext)(struct ucontext_t*, struct ucontext_t*)
       __attribute__((__indirect_return__)) = REAL(swapcontext);
   int res = real_swapcontext(oucp, ucp);
 #    else
@@ -432,34 +439,34 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
 #    define siglongjmp __siglongjmp14
 #  endif
 
-INTERCEPTOR(void, longjmp, void *env, int val) {
+INTERCEPTOR(void, longjmp, void* env, int val) {
   __asan_handle_no_return();
   REAL(longjmp)(env, val);
 }
 
 #  if ASAN_INTERCEPT__LONGJMP
-INTERCEPTOR(void, _longjmp, void *env, int val) {
+INTERCEPTOR(void, _longjmp, void* env, int val) {
   __asan_handle_no_return();
   REAL(_longjmp)(env, val);
 }
 #  endif
 
 #  if ASAN_INTERCEPT___LONGJMP_CHK
-INTERCEPTOR(void, __longjmp_chk, void *env, int val) {
+INTERCEPTOR(void, __longjmp_chk, void* env, int val) {
   __asan_handle_no_return();
   REAL(__longjmp_chk)(env, val);
 }
 #  endif
 
 #  if ASAN_INTERCEPT_SIGLONGJMP
-INTERCEPTOR(void, siglongjmp, void *env, int val) {
+INTERCEPTOR(void, siglongjmp, void* env, int val) {
   __asan_handle_no_return();
   REAL(siglongjmp)(env, val);
 }
 #  endif
 
 #  if ASAN_INTERCEPT___CXA_THROW
-INTERCEPTOR(void, __cxa_throw, void *a, void *b, void *c) {
+INTERCEPTOR(void, __cxa_throw, void* a, void* b, void* c) {
   CHECK(REAL(__cxa_throw));
   __asan_handle_no_return();
   REAL(__cxa_throw)(a, b, c);
@@ -467,7 +474,7 @@ INTERCEPTOR(void, __cxa_throw, void *a, void *b, void *c) {
 #  endif
 
 #  if ASAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
-INTERCEPTOR(void, __cxa_rethrow_primary_exception, void *a) {
+INTERCEPTOR(void, __cxa_rethrow_primary_exception, void* a) {
   CHECK(REAL(__cxa_rethrow_primary_exception));
   __asan_handle_no_return();
   REAL(__cxa_rethrow_primary_exception)(a);
@@ -476,7 +483,7 @@ INTERCEPTOR(void, __cxa_rethrow_primary_exception, void *a) {
 
 #  if ASAN_INTERCEPT__UNWIND_RAISEEXCEPTION
 INTERCEPTOR(_Unwind_Reason_Code, _Unwind_RaiseException,
-            _Unwind_Exception *object) {
+            _Unwind_Exception* object) {
   CHECK(REAL(_Unwind_RaiseException));
   __asan_handle_no_return();
   return REAL(_Unwind_RaiseException)(object);
@@ -485,7 +492,7 @@ INTERCEPTOR(_Unwind_Reason_Code, _Unwind_RaiseException,
 
 #  if ASAN_INTERCEPT__SJLJ_UNWIND_RAISEEXCEPTION
 INTERCEPTOR(_Unwind_Reason_Code, _Unwind_SjLj_RaiseException,
-            _Unwind_Exception *object) {
+            _Unwind_Exception* object) {
   CHECK(REAL(_Unwind_SjLj_RaiseException));
   __asan_handle_no_return();
   return REAL(_Unwind_SjLj_RaiseException)(object);
@@ -494,22 +501,22 @@ INTERCEPTOR(_Unwind_Reason_Code, _Unwind_SjLj_RaiseException,
 
 #  if ASAN_INTERCEPT_INDEX
 #    if ASAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
-INTERCEPTOR(char *, index, const char *string, int c)
+INTERCEPTOR(char*, index, const char* string, int c)
 ALIAS(WRAP(strchr));
 #    else
 #      if SANITIZER_APPLE
-DECLARE_REAL(char *, index, const char *string, int c)
+DECLARE_REAL(char*, index, const char* string, int c)
 OVERRIDE_FUNCTION(index, strchr);
 #      else
-DEFINE_REAL(char *, index, const char *string, int c)
+DEFINE_REAL(char*, index, const char* string, int c)
 #      endif
 #    endif
 #  endif  // ASAN_INTERCEPT_INDEX
 
 // For both strcat() and strncat() we need to check the validity of |to|
 // argument irrespective of the |from| length.
-INTERCEPTOR(char *, strcat, char *to, const char *from) {
-  void *ctx;
+INTERCEPTOR(char*, strcat, char* to, const char* from) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strcat);
   AsanInitFromRtl();
   if (flags()->replace_str) {
@@ -529,8 +536,8 @@ INTERCEPTOR(char *, strcat, char *to, const char *from) {
   return REAL(strcat)(to, from);
 }
 
-INTERCEPTOR(char *, strncat, char *to, const char *from, usize size) {
-  void *ctx;
+INTERCEPTOR(char*, strncat, char* to, const char* from, usize size) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strncat);
   AsanInitFromRtl();
   if (flags()->replace_str) {
@@ -548,8 +555,8 @@ INTERCEPTOR(char *, strncat, char *to, const char *from, usize size) {
   return REAL(strncat)(to, from, size);
 }
 
-INTERCEPTOR(char *, strcpy, char *to, const char *from) {
-  void *ctx;
+INTERCEPTOR(char*, strcpy, char* to, const char* from) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strcpy);
   if constexpr (SANITIZER_APPLE) {
     // strcpy is called from malloc_default_purgeable_zone()
@@ -570,6 +577,20 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   return REAL(strcpy)(to, from);
 }
 
+INTERCEPTOR(wchar_t*, wcscpy, wchar_t* to, const wchar_t* from) {
+  void* ctx;
+  ASAN_INTERCEPTOR_ENTER(ctx, wcscpy);
+  if (!TryAsanInitFromRtl())
+    return REAL(wcscpy)(to, from);
+  if (flags()->replace_str) {
+    uptr size = (internal_wcslen(from) + 1) * sizeof(wchar_t);
+    CHECK_RANGES_OVERLAP("wcscpy", to, size, from, size);
+    ASAN_READ_RANGE(ctx, from, size);
+    ASAN_WRITE_RANGE(ctx, to, size);
+  }
+  return REAL(wcscpy)(to, from);
+}
+
 // Windows doesn't always define the strdup identifier,
 // and when it does it's a macro defined to either _strdup
 // or _strdup_dbg, _strdup_dbg ends up calling _strdup, so
@@ -581,8 +602,8 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
 #    define strdup _strdup
 #  endif
 
-INTERCEPTOR(char *, strdup, const char *s) {
-  void *ctx;
+INTERCEPTOR(char*, strdup, const char* s) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strdup);
   // Allowing null input is Windows-specific
   if (SANITIZER_WINDOWS && UNLIKELY(!s))
@@ -594,16 +615,16 @@ INTERCEPTOR(char *, strdup, const char *s) {
     ASAN_READ_RANGE(ctx, s, length + 1);
   }
   GET_STACK_TRACE_MALLOC;
-  void *new_mem = asan_malloc(length + 1, &stack);
+  void* new_mem = asan_malloc(length + 1, &stack);
   if (new_mem) {
     REAL(memcpy)(new_mem, s, length + 1);
   }
-  return reinterpret_cast<char *>(new_mem);
+  return reinterpret_cast<char*>(new_mem);
 }
 
 #  if ASAN_INTERCEPT___STRDUP
-INTERCEPTOR(char *, __strdup, const char *s) {
-  void *ctx;
+INTERCEPTOR(char*, __strdup, const char* s) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strdup);
   if (UNLIKELY(!TryAsanInitFromRtl()))
     return internal_strdup(s);
@@ -612,16 +633,16 @@ INTERCEPTOR(char *, __strdup, const char *s) {
     ASAN_READ_RANGE(ctx, s, length + 1);
   }
   GET_STACK_TRACE_MALLOC;
-  void *new_mem = asan_malloc(length + 1, &stack);
+  void* new_mem = asan_malloc(length + 1, &stack);
   if (new_mem) {
     REAL(memcpy)(new_mem, s, length + 1);
   }
-  return reinterpret_cast<char *>(new_mem);
+  return reinterpret_cast<char*>(new_mem);
 }
 #  endif  // ASAN_INTERCEPT___STRDUP
 
-INTERCEPTOR(char *, strncpy, char *to, const char *from, usize size) {
-  void *ctx;
+INTERCEPTOR(char*, strncpy, char* to, const char* from, usize size) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strncpy);
   AsanInitFromRtl();
   if (flags()->replace_str) {
@@ -633,21 +654,35 @@ INTERCEPTOR(char *, strncpy, char *to, const char *from, usize size) {
   return REAL(strncpy)(to, from, size);
 }
 
+INTERCEPTOR(wchar_t*, wcsncpy, wchar_t* to, const wchar_t* from, uptr size) {
+  void* ctx;
+  ASAN_INTERCEPTOR_ENTER(ctx, wcsncpy);
+  AsanInitFromRtl();
+  if (flags()->replace_str) {
+    uptr from_size =
+        Min(size, MaybeRealWcsnlen(from, size) + 1) * sizeof(wchar_t);
+    CHECK_RANGES_OVERLAP("wcsncpy", to, from_size, from, from_size);
+    ASAN_READ_RANGE(ctx, from, from_size);
+    ASAN_WRITE_RANGE(ctx, to, size * sizeof(wchar_t));
+  }
+  return REAL(wcsncpy)(to, from, size);
+}
+
 template <typename Fn>
-static ALWAYS_INLINE auto StrtolImpl(void *ctx, Fn real, const char *nptr,
-                                     char **endptr, int base)
+static ALWAYS_INLINE auto StrtolImpl(void* ctx, Fn real, const char* nptr,
+                                     char** endptr, int base)
     -> decltype(real(nullptr, nullptr, 0)) {
   if (!flags()->replace_str)
     return real(nptr, endptr, base);
-  char *real_endptr;
+  char* real_endptr;
   auto res = real(nptr, &real_endptr, base);
   StrtolFixAndCheck(ctx, nptr, endptr, real_endptr, base);
   return res;
 }
 
 #  define INTERCEPTOR_STRTO_BASE(ret_type, func)                             \
-    INTERCEPTOR(ret_type, func, const char *nptr, char **endptr, int base) { \
-      void *ctx;                                                             \
+    INTERCEPTOR(ret_type, func, const char* nptr, char** endptr, int base) { \
+      void* ctx;                                                             \
       ASAN_INTERCEPTOR_ENTER(ctx, func);                                     \
       AsanInitFromRtl();                                                     \
       return StrtolImpl(ctx, REAL(func), nptr, endptr, base);                \
@@ -656,12 +691,12 @@ static ALWAYS_INLINE auto StrtolImpl(void *ctx, Fn real, const char *nptr,
 INTERCEPTOR_STRTO_BASE(long long, strtoll)
 
 #  if SANITIZER_WINDOWS
-INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
+INTERCEPTOR(long, strtol, const char* nptr, char** endptr, int base) {
   // REAL(strtol) may be ntdll!strtol, which doesn't set errno. Instead,
   // call REAL(strtoll) and do the range check ourselves.
   COMPILER_CHECK(sizeof(long) == sizeof(u32));
 
-  void *ctx;
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, strtol);
   AsanInitFromRtl();
 
@@ -686,8 +721,8 @@ INTERCEPTOR_STRTO_BASE(long, __isoc23_strtol)
 INTERCEPTOR_STRTO_BASE(long long, __isoc23_strtoll)
 #  endif
 
-INTERCEPTOR(int, atoi, const char *nptr) {
-  void *ctx;
+INTERCEPTOR(int, atoi, const char* nptr) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, atoi);
   if (SANITIZER_APPLE && UNLIKELY(!AsanInited()))
     return REAL(atoi)(nptr);
@@ -695,7 +730,7 @@ INTERCEPTOR(int, atoi, const char *nptr) {
   if (!flags()->replace_str) {
     return REAL(atoi)(nptr);
   }
-  char *real_endptr;
+  char* real_endptr;
   // "man atoi" tells that behavior of atoi(nptr) is the same as
   // strtol(nptr, 0, 10), i.e. it sets errno to ERANGE if the
   // parsed integer can't be stored in *long* type (even if it's
@@ -706,8 +741,8 @@ INTERCEPTOR(int, atoi, const char *nptr) {
   return result;
 }
 
-INTERCEPTOR(long, atol, const char *nptr) {
-  void *ctx;
+INTERCEPTOR(long, atol, const char* nptr) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, atol);
   if (SANITIZER_APPLE && UNLIKELY(!AsanInited()))
     return REAL(atol)(nptr);
@@ -715,21 +750,21 @@ INTERCEPTOR(long, atol, const char *nptr) {
   if (!flags()->replace_str) {
     return REAL(atol)(nptr);
   }
-  char *real_endptr;
+  char* real_endptr;
   long result = REAL(strtol)(nptr, &real_endptr, 10);
   FixRealStrtolEndptr(nptr, &real_endptr);
   ASAN_READ_STRING(ctx, nptr, (real_endptr - nptr) + 1);
   return result;
 }
 
-INTERCEPTOR(long long, atoll, const char *nptr) {
-  void *ctx;
+INTERCEPTOR(long long, atoll, const char* nptr) {
+  void* ctx;
   ASAN_INTERCEPTOR_ENTER(ctx, atoll);
   AsanInitFromRtl();
   if (!flags()->replace_str) {
     return REAL(atoll)(nptr);
   }
-  char *real_endptr;
+  char* real_endptr;
   long long result = REAL(strtoll)(nptr, &real_endptr, 10);
   FixRealStrtolEndptr(nptr, &real_endptr);
   ASAN_READ_STRING(ctx, nptr, (real_endptr - nptr) + 1);
@@ -737,15 +772,15 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
 }
 
 #  if ASAN_INTERCEPT___CXA_ATEXIT || ASAN_INTERCEPT_ATEXIT
-static void AtCxaAtexit(void *unused) {
+static void AtCxaAtexit(void* unused) {
   (void)unused;
   StopInitOrderChecking();
 }
 #  endif
 
 #  if ASAN_INTERCEPT___CXA_ATEXIT
-INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
-            void *dso_handle) {
+INTERCEPTOR(int, __cxa_atexit, void (*func)(void*), void* arg,
+            void* dso_handle) {
   if (SANITIZER_APPLE && UNLIKELY(!AsanInited()))
     return REAL(__cxa_atexit)(func, arg, dso_handle);
   AsanInitFromRtl();
@@ -765,7 +800,7 @@ INTERCEPTOR(int, atexit, void (*func)()) {
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
   // Avoid calling real atexit as it is unreachable on at least on Linux.
-  int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
+  int res = REAL(__cxa_atexit)((void (*)(void* a))func, nullptr, nullptr);
   REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   return res;
 }
@@ -809,6 +844,11 @@ void InitializeAsanInterceptors() {
   ASAN_INTERCEPT_FUNC(strncat);
   ASAN_INTERCEPT_FUNC(strncpy);
   ASAN_INTERCEPT_FUNC(strdup);
+
+  // Intercept wcs* functions.
+  ASAN_INTERCEPT_FUNC(wcscpy);
+  ASAN_INTERCEPT_FUNC(wcsncpy);
+
 #  if ASAN_INTERCEPT___STRDUP
   ASAN_INTERCEPT_FUNC(__strdup);
 #  endif
@@ -826,7 +866,7 @@ void InitializeAsanInterceptors() {
   ASAN_INTERCEPT_FUNC(__isoc23_strtoll);
 #  endif
 
-  // Intecept jump-related functions.
+  // Intercept jump-related functions.
   ASAN_INTERCEPT_FUNC(longjmp);
 
 #  if ASAN_INTERCEPT_SWAPCONTEXT

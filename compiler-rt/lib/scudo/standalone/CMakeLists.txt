@@ -75,7 +75,6 @@ set(SCUDO_HEADERS
   linux.h
   wos.h
   list.h
-  local_cache.h
   memtag.h
   mem_map.h
   mem_map_base.h
@@ -93,6 +92,7 @@ set(SCUDO_HEADERS
   report_linux.h
   report_wos.h
   secondary.h
+  size_class_allocator.h
   size_class_map.h
   stack_depot.h
   stats.h
