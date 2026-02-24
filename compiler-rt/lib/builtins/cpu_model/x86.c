@@ -19,7 +19,7 @@
 #error This file is intended only for x86-based targets
 #endif
 #pragma message("NOT IMPLEMENTED (ASSERT): cpu_model/x86.c")
-#if false && (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
+#if true && (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
 
 #if __STDC_HOSTED__
 #include <assert.h>

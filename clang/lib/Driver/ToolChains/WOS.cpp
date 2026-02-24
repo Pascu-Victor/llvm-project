@@ -72,7 +72,8 @@ void wos::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString("--sysroot=" + D.SysRoot));
 
   if (!Args.hasArg(clang::options::OPT_shared) &&
-      !Args.hasArg(clang::options::OPT_r))
+      !Args.hasArg(clang::options::OPT_r) &&
+      !Args.hasArg(clang::options::OPT_static))
     CmdArgs.push_back("-pie");
 
   if (Args.hasArg(clang::options::OPT_rdynamic))
@@ -106,7 +107,8 @@ void wos::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const SanitizerArgs &SanArgs = ToolChain.getSanitizerArgs(Args);
 
   if (!Args.hasArg(clang::options::OPT_shared) &&
-      !Args.hasArg(clang::options::OPT_r)) {
+      !Args.hasArg(clang::options::OPT_r) &&
+      !Args.hasArg(clang::options::OPT_static)) {
     std::string Dyld = D.DyldPrefix;
     if (SanArgs.needsAsanRt() && SanArgs.needsSharedRt())
       Dyld += "asan/";
@@ -131,7 +133,9 @@ void wos::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   if (!Args.hasArg(clang::options::OPT_nostdlib,
                    clang::options::OPT_nostartfiles, clang::options::OPT_r)) {
     if (!Args.hasArg(clang::options::OPT_shared)) {
-      CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("Scrt1.o")));
+      const char *crt =
+          Args.hasArg(clang::options::OPT_static) ? "crt1.o" : "Scrt1.o";
+      CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath(crt)));
     }
   }
 
@@ -158,8 +162,6 @@ void wos::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   bool SplitStack = Args.hasArg(clang::options::OPT_fsplit_stack);
   if (!Args.hasArg(clang::options::OPT_nostdlib,
                    clang::options::OPT_nodefaultlibs, clang::options::OPT_r)) {
-    if (Args.hasArg(clang::options::OPT_static))
-      CmdArgs.push_back("-Bdynamic");
 
     if (D.CCCIsCXX()) {
       if (ToolChain.ShouldLinkCXXStdlib(Args)) {
