@@ -323,10 +323,10 @@ protected:
     Builder.defineMacro("__WOS__");
     Builder.defineMacro("__ELF__");
     DefineStd(Builder, "unix", Opts);
+    Builder.defineMacro("_GNU_SOURCE");
+    Builder.defineMacro("_DEFAULT_SOURCE");
     if (this->HasFloat128)
       Builder.defineMacro("__FLOAT128__");
-    if (Opts.CPlusPlus)
-      Builder.defineMacro("_GNU_SOURCE");
   }
 
 public:
