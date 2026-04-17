@@ -481,7 +481,9 @@ void WOS::AddCXXStdlibLibArgs(const ArgList &Args,
 SanitizerMask WOS::getSupportedSanitizers() const {
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
+  Res |= SanitizerKind::KernelAddress;
   Res |= SanitizerKind::HWAddress;
+  Res |= SanitizerKind::KernelHWAddress;
   Res |= SanitizerKind::PointerCompare;
   Res |= SanitizerKind::PointerSubtract;
   Res |= SanitizerKind::Fuzzer;
@@ -490,6 +492,9 @@ SanitizerMask WOS::getSupportedSanitizers() const {
   Res |= SanitizerKind::SafeStack;
   Res |= SanitizerKind::Scudo;
   Res |= SanitizerKind::Thread;
+  Res |= SanitizerKind::KernelMemory;
+  Res |= SanitizerKind::Undefined;
+  Res |= SanitizerKind::CFI;
   return Res;
 }
 
