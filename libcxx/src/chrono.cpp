@@ -229,15 +229,14 @@ static steady_clock::time_point __libcpp_steady_clock_now() noexcept {
   return steady_clock::time_point(nanoseconds(_zx_clock_get_monotonic()));
 }
 
-# elif defined(__WOS__)
+#  elif defined(__WOS__)
 
 static steady_clock::time_point __libcpp_steady_clock_now() noexcept {
-  while (true)
-  {
-    #warning "WOS: __libcpp_steady_clock_now() is not implemented"
-    //TODO: WOS implement this
-  }
-  return steady_clock::time_point();  
+  struct timespec tp;
+  if (0 != clock_gettime(CLOCK_MONOTONIC, &tp))
+    return steady_clock::time_point();
+
+  return steady_clock::time_point(seconds(tp.tv_sec) + nanoseconds(tp.tv_nsec));
 }
 
 #  elif defined(_LIBCPP_HAS_TIMESPEC_GET)
