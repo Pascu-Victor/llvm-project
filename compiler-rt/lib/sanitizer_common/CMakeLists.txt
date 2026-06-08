@@ -25,6 +25,7 @@ set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_platform_limits_netbsd.cpp
   sanitizer_platform_limits_posix.cpp
   sanitizer_platform_limits_solaris.cpp
+  sanitizer_platform_limits_wos.cpp
   sanitizer_posix.cpp
   sanitizer_printf.cpp
   sanitizer_procmaps_common.cpp
@@ -44,7 +45,6 @@ set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_thread_registry.cpp
   sanitizer_type_traits.cpp
   sanitizer_win.cpp
-  sanitizer_wos.cpp
   sanitizer_win_interception.cpp
   )
 

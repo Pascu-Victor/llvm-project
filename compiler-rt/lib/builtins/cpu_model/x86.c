@@ -18,7 +18,6 @@
       defined(_M_X64))
 #error This file is intended only for x86-based targets
 #endif
-#pragma message("NOT IMPLEMENTED (ASSERT): cpu_model/x86.c")
 #if true && (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
 
 #if __STDC_HOSTED__

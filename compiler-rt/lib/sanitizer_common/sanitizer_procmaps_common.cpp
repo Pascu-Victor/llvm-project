@@ -11,12 +11,12 @@
 
 #include "sanitizer_platform.h"
 
-#if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD ||                \
-    SANITIZER_SOLARIS
+#if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
+    SANITIZER_SOLARIS || SANITIZER_WOS
 
-#include "sanitizer_common.h"
-#include "sanitizer_placement_new.h"
-#include "sanitizer_procmaps.h"
+#  include "sanitizer_common.h"
+#  include "sanitizer_placement_new.h"
+#  include "sanitizer_procmaps.h"
 
 namespace __sanitizer {
 
@@ -34,7 +34,7 @@ static int TranslateDigit(char c) {
 }
 
 // Parse a number and promote 'p' up to the first non-digit character.
-static uptr ParseNumber(const char **p, int base) {
+static uptr ParseNumber(const char** p, int base) {
   uptr n = 0;
   int d;
   CHECK(base >= 2 && base <= 16);
@@ -50,20 +50,16 @@ bool IsDecimal(char c) {
   return d >= 0 && d < 10;
 }
 
-uptr ParseDecimal(const char **p) {
-  return ParseNumber(p, 10);
-}
+uptr ParseDecimal(const char** p) { return ParseNumber(p, 10); }
 
 bool IsHex(char c) {
   int d = TranslateDigit(c);
   return d >= 0 && d < 16;
 }
 
-uptr ParseHex(const char **p) {
-  return ParseNumber(p, 16);
-}
+uptr ParseHex(const char** p) { return ParseNumber(p, 16); }
 
-void MemoryMappedSegment::AddAddressRanges(LoadedModule *module) {
+void MemoryMappedSegment::AddAddressRanges(LoadedModule* module) {
   // data_ should be unused on this platform
   CHECK(!data_);
   module->addAddressRange(start, end, IsExecutable(), IsWritable());
@@ -83,9 +79,7 @@ MemoryMappingLayout::MemoryMappingLayout(bool cache_enabled) {
   Reset();
 }
 
-bool MemoryMappingLayout::Error() const {
-  return data_.current == nullptr;
-}
+bool MemoryMappingLayout::Error() const { return data_.current == nullptr; }
 
 MemoryMappingLayout::~MemoryMappingLayout() {
   // Only unmap the buffer if it is different from the cached one. Otherwise
@@ -94,9 +88,7 @@ MemoryMappingLayout::~MemoryMappingLayout() {
     UnmapOrDie(data_.proc_self_maps.data, data_.proc_self_maps.mmaped_size);
 }
 
-void MemoryMappingLayout::Reset() {
-  data_.current = data_.proc_self_maps.data;
-}
+void MemoryMappingLayout::Reset() { data_.current = data_.proc_self_maps.data; }
 
 // static
 void MemoryMappingLayout::CacheMemoryMappings() {
@@ -118,12 +110,12 @@ void MemoryMappingLayout::LoadFromCache() {
 }
 
 void MemoryMappingLayout::DumpListOfModules(
-    InternalMmapVectorNoCtor<LoadedModule> *modules) {
+    InternalMmapVectorNoCtor<LoadedModule>* modules) {
   Reset();
   InternalMmapVector<char> module_name(kMaxPathLength);
   MemoryMappedSegment segment(module_name.data(), module_name.size());
   for (uptr i = 0; Next(&segment); i++) {
-    const char *cur_name = segment.filename;
+    const char* cur_name = segment.filename;
     if (cur_name[0] == '\0')
       continue;
     // Don't subtract 'cur_beg' from the first entry:
@@ -145,9 +137,9 @@ void MemoryMappingLayout::DumpListOfModules(
   }
 }
 
-#if SANITIZER_LINUX || SANITIZER_ANDROID || SANITIZER_SOLARIS
-void GetMemoryProfile(fill_profile_f cb, uptr *stats) {
-  char *smaps = nullptr;
+#  if SANITIZER_LINUX || SANITIZER_ANDROID || SANITIZER_SOLARIS || SANITIZER_WOS
+void GetMemoryProfile(fill_profile_f cb, uptr* stats) {
+  char* smaps = nullptr;
   uptr smaps_cap = 0;
   uptr smaps_len = 0;
   if (!ReadFileToBuffer("/proc/self/smaps", &smaps, &smaps_cap, &smaps_len))
@@ -156,12 +148,12 @@ void GetMemoryProfile(fill_profile_f cb, uptr *stats) {
   UnmapOrDie(smaps, smaps_cap);
 }
 
-void ParseUnixMemoryProfile(fill_profile_f cb, uptr *stats, char *smaps,
+void ParseUnixMemoryProfile(fill_profile_f cb, uptr* stats, char* smaps,
                             uptr smaps_len) {
   uptr start = 0;
   bool file = false;
-  const char *pos = smaps;
-  char *end = smaps + smaps_len;
+  const char* pos = smaps;
+  char* end = smaps + smaps_len;
   if (smaps_len < 2)
     return;
   // The following parsing can crash on almost every line
@@ -175,18 +167,20 @@ void ParseUnixMemoryProfile(fill_profile_f cb, uptr *stats, char *smaps,
   while (pos < end) {
     if (IsHex(pos[0])) {
       start = ParseHex(&pos);
-      for (; *pos != '/' && *pos > '\n'; pos++) {}
+      for (; *pos != '/' && *pos > '\n'; pos++) {
+      }
       file = *pos == '/';
     } else if (internal_strncmp(pos, "Rss:", 4) == 0) {
       while (pos < end && !IsDecimal(*pos)) pos++;
       uptr rss = ParseDecimal(&pos) * 1024;
       cb(start, rss, file, stats);
     }
-    while (*pos++ != '\n') {}
+    while (*pos++ != '\n') {
+    }
   }
 }
-#endif
+#  endif
 
-} // namespace __sanitizer
+}  // namespace __sanitizer
 
 #endif

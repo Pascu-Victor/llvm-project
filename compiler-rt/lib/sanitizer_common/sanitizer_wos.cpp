@@ -14,6 +14,7 @@
 #include "sanitizer_platform.h"
 
 #if SANITIZER_WOS
+#  include <callnums/futex.h>
 #  include <dlfcn.h>
 #  include <errno.h>
 #  include <fcntl.h>
@@ -23,14 +24,19 @@
 #  include <signal.h>
 #  include <sys/hcf.h>
 #  include <sys/mman.h>
+#  include <sys/multiproc.h>
 #  include <sys/param.h>
 #  include <sys/personality.h>
+#  include <sys/process.h>
 #  include <sys/resource.h>
 #  include <sys/stat.h>
 #  include <sys/syscall.h>
 #  include <sys/time.h>
+#  include <sys/time_calls.h>
+#  include <sys/time_ops.h>
 #  include <sys/types.h>
 #  include <sys/utsname.h>
+#  include <sys/vfs.h>
 #  include <ucontext.h>
 #  include <unistd.h>
 
@@ -44,18 +50,12 @@
 #  include "sanitizer_procmaps.h"
 #  include "sanitizer_wos.h"
 
-extern char **environ;
+extern char** environ;
 
 struct kernel_timeval {
   long tv_sec;
   long tv_usec;
 };
-
-const int FUTEX_WAIT = 0;
-const int FUTEX_WAKE = 1;
-const int FUTEX_PRIVATE_FLAG = 128;
-const int FUTEX_WAIT_PRIVATE = FUTEX_WAIT | FUTEX_PRIVATE_FLAG;
-const int FUTEX_WAKE_PRIVATE = FUTEX_WAKE | FUTEX_PRIVATE_FLAG;
 
 #  if !defined(GRND_NONBLOCK)
 #    define GRND_NONBLOCK 1
@@ -64,15 +64,79 @@ const int FUTEX_WAKE_PRIVATE = FUTEX_WAKE | FUTEX_PRIVATE_FLAG;
 
 namespace __sanitizer {
 
-void SetSigProcMask(__sanitizer_sigset_t *set, __sanitizer_sigset_t *oldset) {
+static uptr ToSanitizerResult(int64_t result) {
+  return static_cast<uptr>(result);
+}
+
+enum class WosVmemOps : uint64_t {
+  anon_allocate = 0,
+  anon_free = 1,
+  protect = 2,
+  mremap = 3,
+};
+
+static int64_t WosVmemMap(void** out, void* hint, uptr size, int prot,
+                          int flags, int fd, u64 offset) {
+  uint64_t result =
+      syscall(ker::abi::callnums::vmem_map, reinterpret_cast<uint64_t>(hint),
+              static_cast<uint64_t>(size), static_cast<uint64_t>(prot),
+              static_cast<uint64_t>(flags), static_cast<uint64_t>(fd), offset);
+  auto signed_result = static_cast<int64_t>(result);
+  if (signed_result < 0)
+    return signed_result;
+  *out = reinterpret_cast<void*>(result);
+  return 0;
+}
+
+static int64_t WosVmemFree(void* addr, uptr size) {
+  return static_cast<int64_t>(syscall(
+      ker::abi::callnums::vmem, static_cast<uint64_t>(WosVmemOps::anon_free),
+      reinterpret_cast<uint64_t>(addr), static_cast<uint64_t>(size), 0, 0));
+}
+
+static int64_t WosVmemProtect(void* addr, uptr size, int prot) {
+  return static_cast<int64_t>(syscall(
+      ker::abi::callnums::vmem, static_cast<uint64_t>(WosVmemOps::protect),
+      reinterpret_cast<uint64_t>(addr), static_cast<uint64_t>(size),
+      static_cast<uint64_t>(prot), 0));
+}
+
+static int64_t WosVmemRemap(void** out, void* old_addr, uptr old_size,
+                            uptr new_size, int flags) {
+  uint64_t result = syscall(
+      ker::abi::callnums::vmem, static_cast<uint64_t>(WosVmemOps::mremap),
+      reinterpret_cast<uint64_t>(old_addr), static_cast<uint64_t>(old_size),
+      static_cast<uint64_t>(new_size), static_cast<uint64_t>(flags));
+  auto signed_result = static_cast<int64_t>(result);
+  if (signed_result < 0)
+    return signed_result;
+  *out = reinterpret_cast<void*>(result);
+  return 0;
+}
+
+static int64_t WosFutexWait(int* addr, int expected) {
+  return static_cast<int64_t>(syscall(
+      ker::abi::callnums::futex,
+      static_cast<uint64_t>(ker::abi::futex::futex_ops::FUTEX_WAIT),
+      reinterpret_cast<uint64_t>(addr), static_cast<uint64_t>(expected), 0));
+}
+
+static int64_t WosFutexWake(int* addr) {
+  return static_cast<int64_t>(
+      syscall(ker::abi::callnums::futex,
+              static_cast<uint64_t>(ker::abi::futex::futex_ops::FUTEX_WAKE),
+              reinterpret_cast<uint64_t>(addr)));
+}
+
+void SetSigProcMask(__sanitizer_sigset_t* set, __sanitizer_sigset_t* oldset) {
   CHECK_EQ(0, internal_sigprocmask(SIG_SETMASK, set, oldset));
 }
 
 // Assume SANITIZER_LINUX
 // Deletes the specified signal from newset, if it is not present in oldset
 // Equivalently: newset[signum] = newset[signum] & oldset[signum]
-static void KeepUnblocked(__sanitizer_sigset_t &newset,
-                          __sanitizer_sigset_t &oldset, int signum) {
+static void KeepUnblocked(__sanitizer_sigset_t& newset,
+                          __sanitizer_sigset_t& oldset, int signum) {
   // FIXME: https://github.com/google/sanitizers/issues/1816
   // Assume !SANITIZER_ANDROID
   if (!internal_sigismember(&oldset, signum))
@@ -80,7 +144,7 @@ static void KeepUnblocked(__sanitizer_sigset_t &newset,
 }
 
 // Block asynchronous signals
-void BlockSignals(__sanitizer_sigset_t *oldset) {
+void BlockSignals(__sanitizer_sigset_t* oldset) {
   __sanitizer_sigset_t newset;
   internal_sigfillset(&newset);
   __sanitizer_sigset_t currentset;
@@ -112,7 +176,7 @@ void BlockSignals(__sanitizer_sigset_t *oldset) {
   SetSigProcMask(&newset, oldset);
 }
 
-ScopedBlockSignals::ScopedBlockSignals(__sanitizer_sigset_t *copy) {
+ScopedBlockSignals::ScopedBlockSignals(__sanitizer_sigset_t* copy) {
   BlockSignals(&saved_);
   if (copy)
     internal_memcpy(copy, &saved_, sizeof(saved_));
@@ -120,190 +184,173 @@ ScopedBlockSignals::ScopedBlockSignals(__sanitizer_sigset_t *copy) {
 
 ScopedBlockSignals::~ScopedBlockSignals() { SetSigProcMask(&saved_, nullptr); }
 
-#  include "sanitizer_syscall_wos_x86_64.inc"
+#  if defined(__x86_64__)
+#    include "sanitizer_syscall_wos_x86_64.inc"
+#  else
+#    include "sanitizer_syscall_generic.inc"
+#  endif
+
+int internal_sigaction(int signum, const void* act, void* oldact) {
+  return internal_sigaction_norestorer(signum, act, oldact);
+}
 
 // --------------- sanitizer_libc.h
-uptr internal_mmap(void *addr, uptr length, int prot, int flags, int fd,
+uptr internal_mmap(void* addr, uptr length, int prot, int flags, int fd,
                    u64 offset) {
-#  pragma message "WARNING: internal_mmap is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(mmap), (uptr)addr, length, prot, flags,
-  //   fd,
-  //                          offset);
+  void* result = nullptr;
+  int64_t err = WosVmemMap(&result, addr, length, prot, flags, fd, offset);
+  return err < 0 ? ToSanitizerResult(err) : reinterpret_cast<uptr>(result);
 }
 
-uptr internal_munmap(void *addr, uptr length) {
-#  pragma message "WARNING: internal_munmap is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(munmap), (uptr)addr, length);
+uptr internal_munmap(void* addr, uptr length) {
+  return ToSanitizerResult(WosVmemFree(addr, length));
 }
 
-uptr internal_mremap(void *old_address, uptr old_size, uptr new_size, int flags,
-                     void *new_address) {
-#  pragma message "WARNING: internal_mremap is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(mremap), (uptr)old_address, old_size,
-  //                          new_size, flags, (uptr)new_address);
+uptr internal_mremap(void* old_address, uptr old_size, uptr new_size, int flags,
+                     void* new_address) {
+  (void)new_address;
+  void* result = nullptr;
+  int64_t err = WosVmemRemap(&result, old_address, old_size, new_size, flags);
+  return err < 0 ? ToSanitizerResult(err) : reinterpret_cast<uptr>(result);
 }
 
-int internal_mprotect(void *addr, uptr length, int prot) {
-#  pragma message "WARNING: internal_mprotect is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(mprotect), (uptr)addr, length, prot);
+int internal_mprotect(void* addr, uptr length, int prot) {
+  return static_cast<int>(WosVmemProtect(addr, length, prot));
 }
 
 int internal_madvise(uptr addr, uptr length, int advice) {
-#  pragma message "WARNING: internal_madvise is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(madvise), addr, length, advice);
+  (void)addr;
+  (void)length;
+  (void)advice;
+  return 0;
+}
+
+void UnmapFromTo(uptr from, uptr to) {
+  if (to == from)
+    return;
+  CHECK(to >= from);
+  uptr res = internal_munmap(reinterpret_cast<void*>(from), to - from);
+  if (UNLIKELY(internal_iserror(res))) {
+    Report("ERROR: %s failed to unmap 0x%zx (%zd) bytes at address %p\n",
+           SanitizerToolName, to - from, to - from,
+           reinterpret_cast<void*>(from));
+    CHECK("unable to unmap" && 0);
+  }
+}
+
+uptr MapDynamicShadow(uptr shadow_size_bytes, uptr shadow_scale,
+                      uptr min_shadow_base_alignment, UNUSED uptr& high_mem_end,
+                      uptr granularity) {
+  const uptr alignment =
+      Max<uptr>(granularity << shadow_scale, 1ULL << min_shadow_base_alignment);
+  const uptr left_padding =
+      Max<uptr>(granularity, 1ULL << min_shadow_base_alignment);
+
+  const uptr shadow_size = RoundUpTo(shadow_size_bytes, granularity);
+  const uptr map_size = shadow_size + left_padding + alignment;
+
+  const uptr map_start = reinterpret_cast<uptr>(MmapNoAccess(map_size));
+  CHECK_NE(map_start, static_cast<uptr>(-1));
+
+  const uptr shadow_start = RoundUpTo(map_start + left_padding, alignment);
+
+  UnmapFromTo(map_start, shadow_start - left_padding);
+  UnmapFromTo(shadow_start + shadow_size, map_start + map_size);
+
+  return shadow_start;
 }
 
 uptr internal_close(fd_t fd) {
-#  pragma message "WARNING: internal_close is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(close), fd);
+  return ToSanitizerResult(ker::abi::vfs::close(fd));
 }
 
-uptr internal_open(const char *filename, int flags) {
-#  pragma message "WARNING: internal_open is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(openat), AT_FDCWD, (uptr)filename,
-  //   flags);
+uptr internal_open(const char* filename, int flags) {
+  return ToSanitizerResult(ker::abi::vfs::open(filename, flags, 0));
 }
 
-uptr internal_open(const char *filename, int flags, u32 mode) {
-#  pragma message "WARNING: internal_open is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(openat), AT_FDCWD, (uptr)filename, flags,
-  //                          mode);
+uptr internal_open(const char* filename, int flags, u32 mode) {
+  return ToSanitizerResult(ker::abi::vfs::open(filename, flags, mode));
 }
 
-uptr internal_read(fd_t fd, void *buf, uptr count) {
-#  pragma message "WARNING: internal_read is not implemented for WOS."
-  hcf();
-  //   sptr res;
-  //   HANDLE_EINTR(res,
-  //                (sptr)internal_syscall(SYSCALL(read), fd, (uptr)buf,
-  //                count));
-  //   return res;
+uptr internal_read(fd_t fd, void* buf, uptr count) {
+  return ToSanitizerResult(ker::abi::vfs::read(fd, buf, count));
 }
 
-uptr internal_write(fd_t fd, const void *buf, uptr count) {
-#  pragma message "WARNING: internal_write is not implemented for WOS."
-  hcf();
-  //   sptr res;
-  //   HANDLE_EINTR(res,
-  //                (sptr)internal_syscall(SYSCALL(write), fd, (uptr)buf,
-  //                count));
-  //   return res;
+uptr internal_write(fd_t fd, const void* buf, uptr count) {
+  return ToSanitizerResult(ker::abi::vfs::write(fd, buf, count));
 }
 
 uptr internal_ftruncate(fd_t fd, uptr size) {
-#  pragma message "WARNING: internal_ftruncate is not implemented for WOS."
-  hcf();
-  //   sptr res;
-  //   HANDLE_EINTR(res,
-  //                (sptr)internal_syscall(SYSCALL(ftruncate), fd,
-  //                (OFF_T)size));
-  //   return res;
+  return ToSanitizerResult(
+      ker::abi::vfs::truncate(fd, static_cast<off_t>(size)));
 }
 
-uptr internal_stat(const char *path, void *buf) {
-#  pragma message "WARNING: internal_stat is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(newfstatat), AT_FDCWD, (uptr)path,
-  //   (uptr)buf,
-  //                          0);
+uptr internal_stat(const char* path, void* buf) {
+  return ToSanitizerResult(ker::abi::vfs::stat_path(path, buf));
 }
 
-uptr internal_lstat(const char *path, void *buf) {
-#  pragma message "WARNING: internal_lstat is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(newfstatat), AT_FDCWD, (uptr)path,
-  //   (uptr)buf,
-  //                          AT_SYMLINK_NOFOLLOW);
+uptr internal_lstat(const char* path, void* buf) {
+  return ToSanitizerResult(ker::abi::vfs::lstat_path(path, buf));
 }
 
-uptr internal_fstat(fd_t fd, void *buf) {
-#  pragma message "WARNING: internal_fstat is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(fstat), fd, (uptr)buf);
+uptr internal_fstat(fd_t fd, void* buf) {
+  return ToSanitizerResult(ker::abi::vfs::fstat_fd(fd, buf));
 }
 
 uptr internal_filesize(fd_t fd) {
-#  pragma message "WARNING: internal_filesize is not implemented for WOS."
-  hcf();
-  //   struct stat st;
-  //   if (internal_fstat(fd, &st))
-  //     return -1;
-  //   return (uptr)st.st_size;
+  struct stat st;
+  if (internal_fstat(fd, &st))
+    return static_cast<uptr>(-1);
+  return static_cast<uptr>(st.st_size);
 }
 
 uptr internal_dup(int oldfd) {
-#  pragma message "WARNING: internal_dup is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(dup), oldfd);
+  return ToSanitizerResult(ker::abi::vfs::dup(oldfd));
 }
 
 uptr internal_dup2(int oldfd, int newfd) {
-#  pragma message "WARNING: internal_dup2 is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(dup3), oldfd, newfd, 0);
+  return ToSanitizerResult(ker::abi::vfs::dup2(oldfd, newfd));
 }
 
-uptr internal_readlink(const char *path, char *buf, uptr bufsize) {
-#  pragma message "WARNING: internal_readlink is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(readlinkat), AT_FDCWD, (uptr)path,
-  //   (uptr)buf, bufsize);
+uptr internal_readlink(const char* path, char* buf, uptr bufsize) {
+  return ToSanitizerResult(ker::abi::vfs::readlink(path, buf, bufsize));
 }
 
-uptr internal_unlink(const char *path) {
-#  pragma message "WARNING: internal_unlink is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(unlinkat), AT_FDCWD, (uptr)path, 0);
+uptr internal_unlink(const char* path) {
+  return ToSanitizerResult(ker::abi::vfs::unlink(path));
 }
 
-uptr internal_rename(const char *oldpath, const char *newpath) {
-#  pragma message "WARNING: internal_rename is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(renameat), AT_FDCWD, (uptr)oldpath,
-  //   AT_FDCWD,
-  //                          (uptr)newpath);
+uptr internal_rename(const char* oldpath, const char* newpath) {
+  return ToSanitizerResult(ker::abi::vfs::rename(oldpath, newpath));
 }
 
 uptr internal_sched_yield() {
-#  pragma message "WARNING: internal_sched_yield is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(sched_yield));
+  return ToSanitizerResult(static_cast<int64_t>(ker::multiproc::yield()));
 }
 
 void internal_usleep(u64 useconds) {
-#  pragma message "WARNING: internal_usleep is not implemented for WOS."
-  hcf();
-  //   struct timespec ts;
-  //   ts.tv_sec = useconds / 1000000;
-  //   ts.tv_nsec = (useconds % 1000000) * 1000;
-  //   internal_syscall(SYSCALL(nanosleep), &ts, &ts);
+  struct timespec ts;
+  ts.tv_sec = useconds / 1000000;
+  ts.tv_nsec = (useconds % 1000000) * 1000;
+  syscall(ker::abi::callnums::time,
+          static_cast<uint64_t>(ker::abi::sys_time_ops::nanosleep),
+          reinterpret_cast<uint64_t>(&ts), reinterpret_cast<uint64_t>(&ts));
 }
 
-uptr internal_execve(const char *filename, char *const argv[],
-                     char *const envp[]) {
-#  pragma message "WARNING: internal_execve is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(execve), (uptr)filename, (uptr)argv,
-  //                          (uptr)envp);
+uptr internal_execve(const char* filename, char* const argv[],
+                     char* const envp[]) {
+  return ToSanitizerResult(
+      ker::process::execve(filename, const_cast<const char* const*>(argv),
+                           const_cast<const char* const*>(envp)));
 }
 
 void internal__exit(int exitcode) {
-#  pragma message "WARNING: internal__exit is not implemented for WOS."
-  hcf();
-  //   internal_syscall(SYSCALL(exit_group), exitcode);
-  //   Die();  // Unreachable.
+  ker::process::exit(static_cast<uint64_t>(exitcode));
+  Die();
 }
 
 // ----------------- sanitizer_common.h
-bool FileExists(const char *filename) {
+bool FileExists(const char* filename) {
   if (ShouldMockFailureToOpen(filename))
     return false;
   struct stat st;
@@ -313,45 +360,77 @@ bool FileExists(const char *filename) {
   return S_ISREG(st.st_mode);
 }
 
-bool DirExists(const char *path) {
+bool DirExists(const char* path) {
   struct stat st;
   if (internal_stat(path, &st))
     return false;
   return S_ISDIR(st.st_mode);
 }
 
-tid_t GetTid() {
-#  pragma message "WARNING: GetTid is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(gettid));
+ThreadID GetTid() {
+  return static_cast<ThreadID>(ker::multiproc::currentThreadId());
 }
 
-int TgKill(pid_t pid, tid_t tid, int sig) {
-#  pragma message "WARNING: TgKill is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(tgkill), pid, tid, sig);
+int TgKill(pid_t pid, ThreadID tid, int sig) {
+  (void)pid;
+  return static_cast<int>(ker::process::kill(static_cast<int64_t>(tid), sig));
 }
 
 u64 NanoTime() {
-#  pragma message "WARNING: NanoTime is not implemented for WOS."
-  hcf();
-  //   kernel_timeval tv;
-  //   internal_memset(&tv, 0, sizeof(tv));
-  //   internal_syscall(SYSCALL(gettimeofday), &tv, 0);
-  //   return (u64)tv.tv_sec * 1000 * 1000 * 1000 + tv.tv_usec * 1000;
+  struct timeval tv;
+  internal_memset(&tv, 0, sizeof(tv));
+  ker::time::gettimeofday(&tv);
+  return static_cast<u64>(tv.tv_sec) * 1000 * 1000 * 1000 +
+         static_cast<u64>(tv.tv_usec) * 1000;
 }
+
+u64 MonotonicNanoTime() { return NanoTime(); }
+
+void InitTlsSize() {}
+
+uptr GetTlsSize() { return 0; }
+
+void GetThreadStackTopAndBottom(bool at_initialization, uptr* stack_top,
+                                uptr* stack_bottom) {
+  (void)at_initialization;
+  uptr marker = reinterpret_cast<uptr>(&marker);
+  MemoryMappingLayout proc_maps(/*cache_enabled=*/true);
+  MemoryMappedSegment segment;
+  while (!proc_maps.Error() && proc_maps.Next(&segment)) {
+    if (marker >= segment.start && marker < segment.end) {
+      *stack_top = segment.end;
+      *stack_bottom = segment.start;
+      return;
+    }
+  }
+  *stack_top = 0;
+  *stack_bottom = 0;
+}
+
+void GetThreadStackAndTls(bool main, uptr* stk_begin, uptr* stk_end,
+                          uptr* tls_begin, uptr* tls_end) {
+  (void)main;
+  *tls_begin = 0;
+  *tls_end = 0;
+
+  uptr stack_top = 0;
+  uptr stack_bottom = 0;
+  GetThreadStackTopAndBottom(main, &stack_top, &stack_bottom);
+  *stk_begin = stack_bottom;
+  *stk_end = stack_top;
+}
+
 // Used by real_clock_gettime.
-uptr internal_clock_gettime(__sanitizer_clockid_t clk_id, void *tp) {
-#  pragma message "WARNING: internal_clock_gettime is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(clock_gettime), clk_id, tp);
+uptr internal_clock_gettime(__sanitizer_clockid_t clk_id, void* tp) {
+  return ToSanitizerResult(static_cast<int64_t>(ker::time::clock_gettime(
+      static_cast<int>(clk_id), reinterpret_cast<struct timespec*>(tp))));
 }
 
 // Like getenv, but reads env directly from /proc (on Linux) or parses the
 // 'environ' array (on some others) and does not use libc. This function
 // should be called first inside __asan_init.
-const char *GetEnv(const char *name) {
-  static char *environ;
+const char* GetEnv(const char* name) {
+  static char* environ;
   static uptr len;
   static bool inited;
   if (!inited) {
@@ -360,13 +439,18 @@ const char *GetEnv(const char *name) {
     if (!ReadFileToBuffer("/proc/self/environ", &environ, &environ_size, &len))
       environ = nullptr;
   }
-  if (!environ || len == 0)
-    return nullptr;
   uptr namelen = internal_strlen(name);
-  const char *p = environ;
+  if (!environ || len == 0) {
+    for (char** envp = ::environ; envp != nullptr && *envp != nullptr; ++envp) {
+      if (!internal_memcmp(*envp, name, namelen) && (*envp)[namelen] == '=')
+        return *envp + namelen + 1;
+    }
+    return nullptr;
+  }
+  const char* p = environ;
   while (*p != '\0') {  // will happen at the \0\0 that terminates the buffer
     // proc file has the format NAME=value\0NAME=value\0NAME=value\0...
-    const char *endp = (char *)internal_memchr(p, '\0', len - (p - environ));
+    const char* endp = (char*)internal_memchr(p, '\0', len - (p - environ));
     if (!endp)  // this entry isn't NUL terminated
       return nullptr;
     else if (!internal_memcmp(p, name, namelen) && p[namelen] == '=')  // Match.
@@ -377,15 +461,15 @@ const char *GetEnv(const char *name) {
 }
 
 extern "C" {
-SANITIZER_WEAK_ATTRIBUTE extern void *__libc_stack_end;
+SANITIZER_WEAK_ATTRIBUTE extern void* __libc_stack_end;
 }
 
-static void ReadNullSepFileToArray(const char *path, char ***arr,
+static void ReadNullSepFileToArray(const char* path, char*** arr,
                                    int arr_size) {
-  char *buff;
+  char* buff;
   uptr buff_size;
   uptr buff_len;
-  *arr = (char **)MmapOrDie(arr_size * sizeof(char *), "NullSepFileArray");
+  *arr = (char**)MmapOrDie(arr_size * sizeof(char*), "NullSepFileArray");
   if (!ReadFileToBuffer(path, &buff, &buff_size, &buff_len, 1024 * 1024)) {
     (*arr)[0] = nullptr;
     return;
@@ -404,17 +488,17 @@ static void ReadNullSepFileToArray(const char *path, char ***arr,
   (*arr)[count] = nullptr;
 }
 
-static void GetArgsAndEnv(char ***argv, char ***envp) {
+static void GetArgsAndEnv(char*** argv, char*** envp) {
   if (&__libc_stack_end) {
-    uptr *stack_end = (uptr *)__libc_stack_end;
+    uptr* stack_end = (uptr*)__libc_stack_end;
     // Normally argc can be obtained from *stack_end, however, on ARM glibc's
     // _start clobbers it:
     // https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/arm/start.S;hb=refs/heads/release/2.31/master#l75
     // Do not special-case ARM and infer argc from argv everywhere.
     int argc = 0;
     while (stack_end[argc + 1]) argc++;
-    *argv = (char **)(stack_end + 1);
-    *envp = (char **)(stack_end + argc + 2);
+    *argv = (char**)(stack_end + 1);
+    *envp = (char**)(stack_end + argc + 2);
   } else {
     static const int kMaxArgv = 2000, kMaxEnvp = 2000;
     ReadNullSepFileToArray("/proc/self/cmdline", argv, kMaxArgv);
@@ -422,30 +506,24 @@ static void GetArgsAndEnv(char ***argv, char ***envp) {
   }
 }
 
-char **GetArgv() {
+char** GetArgv() {
   char **argv, **envp;
   GetArgsAndEnv(&argv, &envp);
   return argv;
 }
 
-char **GetEnviron() {
+char** GetEnviron() {
   char **argv, **envp;
   GetArgsAndEnv(&argv, &envp);
   return envp;
 }
 
-void FutexWait(atomic_uint32_t *p, u32 cmp) {
-#  pragma message "WARNING: FutexWait is not implemented for WOS."
-  hcf();
-  //   internal_syscall(SYSCALL(futex), (uptr)p, FUTEX_WAIT_PRIVATE, cmp, 0, 0,
-  //   0);
+void FutexWait(atomic_uint32_t* p, u32 cmp) {
+  WosFutexWait(reinterpret_cast<int*>(p), static_cast<int>(cmp));
 }
 
-void FutexWake(atomic_uint32_t *p, u32 count) {
-#  pragma message "WARNING: FutexWake is not implemented for WOS."
-  hcf();
-  //   internal_syscall(SYSCALL(futex), (uptr)p, FUTEX_WAKE_PRIVATE, count, 0,
-  //   0, 0);
+void FutexWake(atomic_uint32_t* p, u32 count) {
+  for (u32 i = 0; i < count; ++i) WosFutexWake(reinterpret_cast<int*>(p));
 }
 
 // ----------------- sanitizer_wos.h
@@ -463,78 +541,54 @@ struct wos_dirent {
 };
 
 // Syscall wrappers.
-uptr internal_ptrace(int request, int pid, void *addr, void *data) {
-#  pragma message "WARNING: internal_ptrace is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(ptrace), request, pid, (uptr)addr,
-  //                          (uptr)data);
+uptr internal_ptrace(int request, int pid, void* addr, void* data) {
+  return ToSanitizerResult(ker::process::ptrace(
+      static_cast<uint64_t>(request), static_cast<uint64_t>(pid),
+      reinterpret_cast<uint64_t>(addr), reinterpret_cast<uint64_t>(data)));
 }
 
-uptr internal_waitpid(int pid, int *status, int options) {
-#  pragma message "WARNING: internal_waitpid is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(wait4), pid, (uptr)status, options,
-  //                          0 /* rusage */);
+uptr internal_waitpid(int pid, int* status, int options) {
+  return ToSanitizerResult(
+      ker::process::waitpid(pid, status, options, nullptr));
 }
 
-uptr internal_getpid() {
-#  pragma message "WARNING: internal_getpid is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(getpid));
-}
+uptr internal_getpid() { return static_cast<uptr>(ker::process::getpid()); }
 
-uptr internal_getppid() {
-#  pragma message "WARNING: internal_getppid is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(getppid));
-}
+uptr internal_getppid() { return static_cast<uptr>(ker::process::getppid()); }
 
-uptr internal_getdents(fd_t fd, struct wos_dirent *dirp, unsigned int count) {
-#  pragma message "WARNING: internal_getdents is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(getdents64), fd, (uptr)dirp, count);
+uptr internal_getdents(fd_t fd, struct wos_dirent* dirp, unsigned int count) {
+  return ToSanitizerResult(ker::abi::vfs::read_dir_entries(fd, dirp, count));
 }
 
 uptr internal_lseek(fd_t fd, OFF_T offset, int whence) {
-#  pragma message "WARNING: internal_lseek is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(lseek), fd, offset, whence);
+  return ToSanitizerResult(ker::abi::vfs::lseek(fd, offset, whence));
 }
 
 // #  include <syscallnos.h>
 uptr internal_prctl(int option, uptr arg2, uptr arg3, uptr arg4, uptr arg5) {
-#  pragma message "WARNING: internal_prctl is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(prctl), option, arg2, arg3, arg4, arg5);
+  return ToSanitizerResult(ker::process::prctl(
+      option, static_cast<uint64_t>(arg2), static_cast<uint64_t>(arg3),
+      static_cast<uint64_t>(arg4), static_cast<uint64_t>(arg5)));
 }
 // Currently internal_arch_prctl() is only needed on x86_64.
 uptr internal_arch_prctl(int option, uptr arg2) {
-#  pragma message "WARNING: internal_arch_prctl is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(__NR_arch_prctl, option, arg2);
+  return ToSanitizerResult(
+      ker::process::arch_prctl(option, static_cast<uint64_t>(arg2)));
 }
 
-uptr internal_sigaltstack(const void *ss, void *oss) {
-#  pragma message "WARNING: internal_sigaltstack is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(sigaltstack), (uptr)ss, (uptr)oss);
+uptr internal_sigaltstack(const void* ss, void* oss) {
+  return ToSanitizerResult(ker::process::sigaltstack(ss, oss));
 }
 
 extern "C" pid_t __fork(void);
 
-int internal_fork() {
-#  pragma message "WARNING: internal_fork is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(clone), SIGCHLD, 0);
-}
+int internal_fork() { return static_cast<int>(ker::process::fork()); }
 
 #  define SA_RESTORER 0x04000000
 // Doesn't set sa_restorer if the caller did not set it, so use with caution
 //(see below).
-int internal_sigaction_norestorer(int signum, const void *act, void *oldact) {
-#  pragma message \
-      "WARNING: internal_sigaction_norestorer is not implemented for WOS."
-  hcf();
+int internal_sigaction_norestorer(int signum, const void* act, void* oldact) {
+  return static_cast<int>(ker::process::sigaction(signum, act, oldact));
   //   __sanitizer_kernel_sigaction_t k_act, k_oldact;
   //   internal_memset(&k_act, 0, sizeof(__sanitizer_kernel_sigaction_t));
   //   internal_memset(&k_oldact, 0, sizeof(__sanitizer_kernel_sigaction_t));
@@ -578,41 +632,34 @@ int internal_sigaction_norestorer(int signum, const void *act, void *oldact) {
   //   return result;
 }
 
-uptr internal_sigprocmask(int how, __sanitizer_sigset_t *set,
-                          __sanitizer_sigset_t *oldset) {
-#  pragma message "WARNING: internal_sigprocmask is not implemented for WOS."
-  hcf();
-  //   __sanitizer_kernel_sigset_t *k_set = (__sanitizer_kernel_sigset_t *)set;
-  //   __sanitizer_kernel_sigset_t *k_oldset = (__sanitizer_kernel_sigset_t
-  //   *)oldset; return internal_syscall(SYSCALL(rt_sigprocmask), (uptr)how,
-  //   (uptr)k_set,
-  //                          (uptr)k_oldset,
-  //                          sizeof(__sanitizer_kernel_sigset_t));
+uptr internal_sigprocmask(int how, __sanitizer_sigset_t* set,
+                          __sanitizer_sigset_t* oldset) {
+  return ToSanitizerResult(ker::process::sigprocmask(how, set, oldset));
 }
 
-void internal_sigfillset(__sanitizer_sigset_t *set) {
+void internal_sigfillset(__sanitizer_sigset_t* set) {
   internal_memset(set, 0xff, sizeof(*set));
 }
 
-void internal_sigemptyset(__sanitizer_sigset_t *set) {
+void internal_sigemptyset(__sanitizer_sigset_t* set) {
   internal_memset(set, 0, sizeof(*set));
 }
 
-void internal_sigdelset(__sanitizer_sigset_t *set, int signum) {
+void internal_sigdelset(__sanitizer_sigset_t* set, int signum) {
   signum -= 1;
   CHECK_GE(signum, 0);
   CHECK_LT(signum, sizeof(*set) * 8);
-  __sanitizer_kernel_sigset_t *k_set = (__sanitizer_kernel_sigset_t *)set;
+  __sanitizer_kernel_sigset_t* k_set = (__sanitizer_kernel_sigset_t*)set;
   const uptr idx = signum / (sizeof(k_set->sig[0]) * 8);
   const uptr bit = signum % (sizeof(k_set->sig[0]) * 8);
   k_set->sig[idx] &= ~((uptr)1 << bit);
 }
 
-bool internal_sigismember(__sanitizer_sigset_t *set, int signum) {
+bool internal_sigismember(__sanitizer_sigset_t* set, int signum) {
   signum -= 1;
   CHECK_GE(signum, 0);
   CHECK_LT(signum, sizeof(*set) * 8);
-  __sanitizer_kernel_sigset_t *k_set = (__sanitizer_kernel_sigset_t *)set;
+  __sanitizer_kernel_sigset_t* k_set = (__sanitizer_kernel_sigset_t*)set;
   const uptr idx = signum / (sizeof(k_set->sig[0]) * 8);
   const uptr bit = signum % (sizeof(k_set->sig[0]) * 8);
   return k_set->sig[idx] & ((uptr)1 << bit);
@@ -624,7 +671,7 @@ ThreadLister::ThreadLister(pid_t pid) : buffer_(4096) {
 }
 
 ThreadLister::Result ThreadLister::ListThreads(
-    InternalMmapVector<tid_t> *threads) {
+    InternalMmapVector<ThreadID>* threads) {
   int descriptor = internal_open(task_path_.data(), O_RDONLY | O_DIRECTORY);
   if (internal_iserror(descriptor)) {
     Report("Can't open %s for reading.\n", task_path_.data());
@@ -637,7 +684,7 @@ ThreadLister::Result ThreadLister::ListThreads(
   for (bool first_read = true;; first_read = false) {
     CHECK_GE(buffer_.size(), 4096);
     uptr read = internal_getdents(
-        descriptor, (struct wos_dirent *)buffer_.data(), buffer_.size());
+        descriptor, (struct wos_dirent*)buffer_.data(), buffer_.size());
     if (!read)
       return result;
     if (internal_iserror(read)) {
@@ -646,7 +693,7 @@ ThreadLister::Result ThreadLister::ListThreads(
     }
 
     for (uptr begin = (uptr)buffer_.data(), end = begin + read; begin < end;) {
-      struct wos_dirent *entry = (struct wos_dirent *)begin;
+      struct wos_dirent* entry = (struct wos_dirent*)begin;
       begin += entry->d_reclen;
       if (entry->d_ino == 1) {
         // Inode 1 is for bad blocks and also can be a reason for early return.
@@ -679,7 +726,7 @@ ThreadLister::Result ThreadLister::ListThreads(
   }
 }
 
-const char *ThreadLister::LoadStatus(tid_t tid) {
+const char* ThreadLister::LoadStatus(ThreadID tid) {
   status_path_.clear();
   status_path_.AppendF("%s/%llu/status", task_path_.data(), tid);
   auto cleanup = at_scope_exit([&] {
@@ -692,14 +739,14 @@ const char *ThreadLister::LoadStatus(tid_t tid) {
   return buffer_.data();
 }
 
-bool ThreadLister::IsAlive(tid_t tid) {
+bool ThreadLister::IsAlive(ThreadID tid) {
   // /proc/%d/task/%d/status uses same call to detect alive threads as
   // proc_task_readdir. See task_state implementation in Linux.
   static const char kPrefix[] = "\nPPid:";
-  const char *status = LoadStatus(tid);
+  const char* status = LoadStatus(tid);
   if (!status)
     return false;
-  const char *field = internal_strstr(status, kPrefix);
+  const char* field = internal_strstr(status, kPrefix);
   if (!field)
     return false;
   field += internal_strlen(kPrefix);
@@ -717,8 +764,8 @@ uptr GetMaxUserVirtualAddress() {
 
 uptr GetPageSize() { return EXEC_PAGESIZE; }
 
-uptr ReadBinaryName(/*out*/ char *buf, uptr buf_len) {
-  const char *default_module_name = "/proc/self/exe";
+uptr ReadBinaryName(/*out*/ char* buf, uptr buf_len) {
+  const char* default_module_name = "/proc/self/exe";
   uptr module_name_len = internal_readlink(default_module_name, buf, buf_len);
   int readlink_error;
   bool IsErr = internal_iserror(module_name_len, &readlink_error);
@@ -735,8 +782,8 @@ uptr ReadBinaryName(/*out*/ char *buf, uptr buf_len) {
   return module_name_len;
 }
 
-uptr ReadLongProcessName(/*out*/ char *buf, uptr buf_len) {
-  char *tmpbuf;
+uptr ReadLongProcessName(/*out*/ char* buf, uptr buf_len) {
+  char* tmpbuf;
   uptr tmpsize;
   uptr tmplen;
   if (ReadFileToBuffer("/proc/self/cmdline", &tmpbuf, &tmpsize, &tmplen,
@@ -749,8 +796,8 @@ uptr ReadLongProcessName(/*out*/ char *buf, uptr buf_len) {
 }
 
 // Match full names of the form /path/to/base_name{-,.}*
-bool LibraryNameIs(const char *full_name, const char *base_name) {
-  const char *name = full_name;
+bool LibraryNameIs(const char* full_name, const char* base_name) {
+  const char* name = full_name;
   // Strip path.
   while (*name != '\0') name++;
   while (name > full_name && *name != '/') name--;
@@ -762,22 +809,31 @@ bool LibraryNameIs(const char *full_name, const char *base_name) {
   return (name[base_name_length] == '-' || name[base_name_length] == '.');
 }
 
+void ListOfModules::init() {
+  clearOrInit();
+  MemoryMappingLayout memory_mapping(/*cache_enabled=*/false);
+  if (!memory_mapping.Error())
+    memory_mapping.DumpListOfModules(&modules_);
+}
+
+void ListOfModules::fallbackInit() { clear(); }
+
 // Call cb for each region mapped by map.
-void ForEachMappedRegion(link_map *map, void (*cb)(const void *, uptr)) {
+void ForEachMappedRegion(link_map* map, void (*cb)(const void*, uptr)) {
   CHECK_NE(map, nullptr);
   typedef ElfW(Phdr) Elf_Phdr;
   typedef ElfW(Ehdr) Elf_Ehdr;
-  char *base = (char *)map->l_addr;
-  Elf_Ehdr *ehdr = (Elf_Ehdr *)base;
-  char *phdrs = base + ehdr->e_phoff;
-  char *phdrs_end = phdrs + ehdr->e_phnum * ehdr->e_phentsize;
+  char* base = (char*)map->l_addr;
+  Elf_Ehdr* ehdr = (Elf_Ehdr*)base;
+  char* phdrs = base + ehdr->e_phoff;
+  char* phdrs_end = phdrs + ehdr->e_phnum * ehdr->e_phentsize;
 
   // Find the segment with the minimum base so we can "relocate" the p_vaddr
   // fields.  Typically ET_DYN objects (DSOs) have base of zero and ET_EXEC
   // objects have a non-zero base.
   uptr preferred_base = (uptr)-1;
-  for (char *iter = phdrs; iter != phdrs_end; iter += ehdr->e_phentsize) {
-    Elf_Phdr *phdr = (Elf_Phdr *)iter;
+  for (char* iter = phdrs; iter != phdrs_end; iter += ehdr->e_phentsize) {
+    Elf_Phdr* phdr = (Elf_Phdr*)iter;
     if (phdr->p_type == PT_LOAD && preferred_base > (uptr)phdr->p_vaddr)
       preferred_base = (uptr)phdr->p_vaddr;
   }
@@ -785,8 +841,8 @@ void ForEachMappedRegion(link_map *map, void (*cb)(const void *, uptr)) {
   // Compute the delta from the real base to get a relocation delta.
   sptr delta = (uptr)base - preferred_base;
   // Now we can figure out what the loader really mapped.
-  for (char *iter = phdrs; iter != phdrs_end; iter += ehdr->e_phentsize) {
-    Elf_Phdr *phdr = (Elf_Phdr *)iter;
+  for (char* iter = phdrs; iter != phdrs_end; iter += ehdr->e_phentsize) {
+    Elf_Phdr* phdr = (Elf_Phdr*)iter;
     if (phdr->p_type == PT_LOAD) {
       uptr seg_start = phdr->p_vaddr + delta;
       uptr seg_end = seg_start + phdr->p_memsz;
@@ -794,7 +850,7 @@ void ForEachMappedRegion(link_map *map, void (*cb)(const void *, uptr)) {
       // load command as defined, since they are mapped from the file.
       seg_start = RoundDownTo(seg_start, GetPageSizeCached());
       seg_end = RoundUpTo(seg_end, GetPageSizeCached());
-      cb((void *)seg_start, seg_end - seg_start);
+      cb((void*)seg_start, seg_end - seg_start);
     }
   }
 }
@@ -805,10 +861,19 @@ void ForEachMappedRegion(link_map *map, void (*cb)(const void *, uptr)) {
 // the parent (because we don't know how to allocate a new thread
 // descriptor to keep glibc happy). So the stock version of clone(), when
 // used with CLONE_VM, would end up corrupting the parent's thread descriptor.
-uptr internal_clone(int (*fn)(void *), void *child_stack, int flags, void *arg,
-                    int *parent_tidptr, void *newtls, int *child_tidptr) {
-#  pragma message "WARNING: internal_clone is not implemented for WOS."
-  hcf();
+uptr internal_clone(int (*fn)(void*), void* child_stack, int flags, void* arg,
+                    int* parent_tidptr, void* newtls, int* child_tidptr) {
+  if (fn == nullptr || child_stack == nullptr)
+    return ToSanitizerResult(-EINVAL);
+  ker::process::CloneVmArgs args = {};
+  args.fn = reinterpret_cast<uint64_t>(fn);
+  args.child_stack = reinterpret_cast<uint64_t>(child_stack);
+  args.flags = static_cast<uint64_t>(flags);
+  args.arg = reinterpret_cast<uint64_t>(arg);
+  args.parent_tidptr = reinterpret_cast<uint64_t>(parent_tidptr);
+  args.newtls = reinterpret_cast<uint64_t>(newtls);
+  args.child_tidptr = reinterpret_cast<uint64_t>(child_tidptr);
+  return ToSanitizerResult(ker::process::clone_vm(&args));
   //   long long res;
   //   if (!fn || !child_stack)
   //     return -EINVAL;
@@ -860,10 +925,10 @@ uptr internal_clone(int (*fn)(void *), void *child_stack, int flags, void *arg,
   //   return res;
 }
 
-int internal_uname(struct utsname *buf) {
-#  pragma message "WARNING: internal_uname is not implemented for WOS."
-  hcf();
-  //   return internal_syscall(SYSCALL(uname), buf);
+int internal_uname(struct utsname* buf) {
+  if (buf == nullptr)
+    return -EFAULT;
+  return static_cast<int>(ker::process::uname(buf));
 }
 
 static HandleSignalMode GetHandleSignalModeImpl(int signum) {
@@ -891,17 +956,17 @@ HandleSignalMode GetHandleSignalMode(int signum) {
   return result;
 }
 
-void *internal_start_thread(void *(*func)(void *arg), void *arg) {
+void* internal_start_thread(void* (*func)(void* arg), void* arg) {
   if (&internal_pthread_create == 0)
     return nullptr;
   // Start the thread with signals blocked, otherwise it can steal user signals.
   ScopedBlockSignals block(nullptr);
-  void *th;
+  void* th;
   internal_pthread_create(&th, nullptr, func, arg);
   return th;
 }
 
-void internal_join_thread(void *th) {
+void internal_join_thread(void* th) {
   if (&internal_pthread_join)
     internal_pthread_join(th, nullptr);
 }
@@ -909,20 +974,20 @@ void internal_join_thread(void *th) {
 using Context = ucontext_t;
 
 SignalContext::WriteFlag SignalContext::GetWriteFlag() const {
-  Context *ucontext = (Context *)context;
+  Context* ucontext = (Context*)context;
   static const uptr PF_WRITE = 1U << 1;
   uptr err = ucontext->uc_mcontext.gregs[REG_ERR];
   return err & PF_WRITE ? Write : Read;
 }
 
 bool SignalContext::IsTrueFaultingAddress() const {
-  auto si = static_cast<const siginfo_t *>(siginfo);
+  auto si = static_cast<const siginfo_t*>(siginfo);
   // SIGSEGV signals without a true fault address have si_code set to 128.
   return si->si_signo == SIGSEGV && si->si_code != 128;
 }
 
 UNUSED
-static const char *RegNumToRegName(int reg) {
+static const char* RegNumToRegName(int reg) {
   switch (reg) {
     case REG_RAX:
       return "rax";
@@ -963,14 +1028,14 @@ static const char *RegNumToRegName(int reg) {
 }
 
 UNUSED
-static void DumpSingleReg(ucontext_t *ctx, int RegNum) {
-  const char *RegName = RegNumToRegName(RegNum);
+static void DumpSingleReg(ucontext_t* ctx, int RegNum) {
+  const char* RegName = RegNumToRegName(RegNum);
   Printf("%s%s = 0x%016llx  ", internal_strlen(RegName) == 2 ? " " : "",
          RegName, ctx->uc_mcontext.gregs[RegNum]);
 }
 
-void SignalContext::DumpAllRegisters(void *context) {
-  ucontext_t *ucontext = (ucontext_t *)context;
+void SignalContext::DumpAllRegisters(void* context) {
+  ucontext_t* ucontext = (ucontext_t*)context;
   Report("Register values:\n");
   DumpSingleReg(ucontext, REG_RAX);
   DumpSingleReg(ucontext, REG_RBX);
@@ -994,8 +1059,8 @@ void SignalContext::DumpAllRegisters(void *context) {
   Printf("\n");
 }
 
-static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
-  ucontext_t *ucontext = (ucontext_t *)context;
+static void GetPcSpBp(void* context, uptr* pc, uptr* sp, uptr* bp) {
+  ucontext_t* ucontext = (ucontext_t*)context;
   *pc = ucontext->uc_mcontext.gregs[REG_RIP];
   *bp = ucontext->uc_mcontext.gregs[REG_RBP];
   *sp = ucontext->uc_mcontext.gregs[REG_RSP];
@@ -1015,7 +1080,9 @@ void CheckMPROTECT() {
   // TODO: remove me
 }
 
-void CheckNoDeepBind(const char *filename, int flag) {
+void InitializePlatformCommonFlags(CommonFlags* cf) { (void)cf; }
+
+void CheckNoDeepBind(const char* filename, int flag) {
   if (flag & RTLD_DEEPBIND) {
     Report(
         "You are trying to dlopen a %s shared library with RTLD_DEEPBIND flag"
@@ -1029,38 +1096,26 @@ void CheckNoDeepBind(const char *filename, int flag) {
 }
 
 uptr FindAvailableMemoryRange(uptr size, uptr alignment, uptr left_padding,
-                              uptr *largest_gap_found,
-                              uptr *max_occupied_addr) {
+                              uptr* largest_gap_found,
+                              uptr* max_occupied_addr) {
   UNREACHABLE("FindAvailableMemoryRange is not available");
   return 0;
 }
 
-bool GetRandom(void *buffer, uptr length, bool blocking) {
-#  pragma message "WARNING: GetRandom is not implemented for WOS."
-  hcf();
-  //   if (!buffer || !length || length > 256)
-  //     return false;
-  //   static atomic_uint8_t skip_getrandom_syscall;
-  //   if (!atomic_load_relaxed(&skip_getrandom_syscall)) {
-  //     // Up to 256 bytes, getrandom will not be interrupted.
-  //     uptr res = internal_syscall(SYSCALL(getrandom), buffer, length,
-  //                                 blocking ? 0 : GRND_NONBLOCK);
-  //     int rverrno = 0;
-  //     if (internal_iserror(res, &rverrno) && rverrno == ENOSYS)
-  //       atomic_store_relaxed(&skip_getrandom_syscall, 1);
-  //     else if (res == length)
-  //       return true;
-  //   }
-  //   // Up to 256 bytes, a read off /dev/urandom will not be interrupted.
-  //   // blocking is moot here, O_NONBLOCK has no effect when opening
-  //   /dev/urandom. uptr fd = internal_open("/dev/urandom", O_RDONLY); if
-  //   (internal_iserror(fd))
-  //     return false;
-  //   uptr res = internal_read(fd, buffer, length);
-  //   if (internal_iserror(res))
-  //     return false;
-  //   internal_close(fd);
-  //   return true;
+bool GetRandom(void* buffer, uptr length, bool blocking) {
+  (void)blocking;
+  if (!buffer || !length || length > 256)
+    return false;
+
+  uptr fd = internal_open("/dev/urandom", O_RDONLY);
+  if (internal_iserror(fd))
+    fd = internal_open("/dev/random", O_RDONLY);
+  if (internal_iserror(fd))
+    return false;
+
+  uptr res = internal_read(static_cast<fd_t>(fd), buffer, length);
+  internal_close(static_cast<fd_t>(fd));
+  return res == length;
 }
 
 }  // namespace __sanitizer

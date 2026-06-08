@@ -13,7 +13,7 @@
 
 #include "sanitizer_common/sanitizer_platform.h"
 #if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
-    SANITIZER_SOLARIS || SANITIZER_HAIKU
+    SANITIZER_SOLARIS || SANITIZER_HAIKU || SANITIZER_WOS
 
 #  if SANITIZER_HAIKU
 #    define _DEFAULT_SOURCE
@@ -55,13 +55,14 @@
 #    include <link.h>
 #  endif
 
-#  if SANITIZER_ANDROID || SANITIZER_FREEBSD || SANITIZER_SOLARIS
+#  if SANITIZER_ANDROID || SANITIZER_FREEBSD || SANITIZER_SOLARIS || \
+      SANITIZER_WOS
 #    include <ucontext.h>
 #  elif SANITIZER_NETBSD
 #    include <link_elf.h>
 #    include <ucontext.h>
 #  elif SANITIZER_HAIKU
-extern "C" void *_DYNAMIC;
+extern "C" void* _DYNAMIC;
 #  else
 #    include <link.h>
 #    include <sys/ucontext.h>
@@ -109,7 +110,7 @@ uptr FindDynamicShadowStart() {
                           GetMmapGranularity());
 }
 
-void AsanApplyToGlobals(globals_op_fptr op, const void *needle) {
+void AsanApplyToGlobals(globals_op_fptr op, const void* needle) {
   UNIMPLEMENTED();
 }
 
@@ -120,7 +121,7 @@ void FlushUnneededASanShadowMemory(uptr p, uptr size) {
 }
 
 void TryReExecWithoutASLR() {
-#    if SANITIZER_LINUX
+#  if SANITIZER_LINUX
   // ASLR personality check.
   // Caution: 'personality' is sometimes forbidden by sandboxes, so only call
   // this function as a last resort (when the memory mapping is incompatible
@@ -149,20 +150,20 @@ void TryReExecWithoutASLR() {
 
     ReExec();
   }
-#    endif
+#  endif
 }
 
-#  if SANITIZER_ANDROID
+#  if SANITIZER_ANDROID || SANITIZER_WOS
 // FIXME: should we do anything for Android?
 void AsanCheckDynamicRTPrereqs() {}
 void AsanCheckIncompatibleRT() {}
 #  else
-static int FindFirstDSOCallback(struct dl_phdr_info *info, size_t size,
-                                void *data) {
+static int FindFirstDSOCallback(struct dl_phdr_info* info, size_t size,
+                                void* data) {
   VReport(2, "info->dlpi_name = %s\tinfo->dlpi_addr = %p\n", info->dlpi_name,
-          (void *)info->dlpi_addr);
+          (void*)info->dlpi_addr);
 
-  const char **name = (const char **)data;
+  const char** name = (const char**)data;
 
   // Ignore first entry (the main program)
   if (!*name) {
@@ -194,7 +195,7 @@ static int FindFirstDSOCallback(struct dl_phdr_info *info, size_t size,
   return 1;
 }
 
-static bool IsDynamicRTName(const char *libname) {
+static bool IsDynamicRTName(const char* libname) {
   return internal_strstr(libname, "libclang_rt.asan") ||
          internal_strstr(libname, "libasan.so");
 }
@@ -209,7 +210,7 @@ void AsanCheckDynamicRTPrereqs() {
     return;
 
   // Ensure that dynamic RT is the first DSO in the list
-  const char *first_dso_name = nullptr;
+  const char* first_dso_name = nullptr;
   dl_iterate_phdr(FindFirstDSOCallback, &first_dso_name);
   if (first_dso_name && first_dso_name[0] && !IsDynamicRTName(first_dso_name)) {
     Report(
@@ -252,20 +253,20 @@ void AsanCheckIncompatibleRT() {
 #  if ASAN_INTERCEPT_SWAPCONTEXT
 constexpr u32 kAsanContextStackFlagsMagic = 0x51260eea;
 
-static int HashContextStack(const ucontext_t &ucp) {
+static int HashContextStack(const ucontext_t& ucp) {
   MurMur2Hash64Builder hash(kAsanContextStackFlagsMagic);
   hash.add(reinterpret_cast<uptr>(ucp.uc_stack.ss_sp));
   hash.add(ucp.uc_stack.ss_size);
   return static_cast<int>(hash.get());
 }
 
-void SignContextStack(void *context) {
-  ucontext_t *ucp = reinterpret_cast<ucontext_t *>(context);
+void SignContextStack(void* context) {
+  ucontext_t* ucp = reinterpret_cast<ucontext_t*>(context);
   ucp->uc_stack.ss_flags = HashContextStack(*ucp);
 }
 
-void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
-  const ucontext_t *ucp = reinterpret_cast<const ucontext_t *>(context);
+void ReadContextStack(void* context, uptr* stack, uptr* ssize) {
+  const ucontext_t* ucp = reinterpret_cast<const ucontext_t*>(context);
   if (HashContextStack(*ucp) == ucp->uc_stack.ss_flags) {
     *stack = reinterpret_cast<uptr>(ucp->uc_stack.ss_sp);
     *ssize = ucp->uc_stack.ss_size;
@@ -276,7 +277,7 @@ void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
 }
 #  endif  // ASAN_INTERCEPT_SWAPCONTEXT
 
-void *AsanDlSymNext(const char *sym) { return dlsym(RTLD_NEXT, sym); }
+void* AsanDlSymNext(const char* sym) { return dlsym(RTLD_NEXT, sym); }
 
 bool HandleDlopenInit() {
   // Not supported on this platform.

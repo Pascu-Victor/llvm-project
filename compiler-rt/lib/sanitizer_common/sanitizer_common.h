@@ -125,8 +125,8 @@ void MprotectMallocZones(void *addr, int prot);
 bool ZeroMmapFixedRegion(uptr fixed_addr, uptr size) WARN_UNUSED_RESULT;
 #endif
 
-#if SANITIZER_LINUX
-// Unmap memory. Currently only used on Linux.
+#if SANITIZER_LINUX || SANITIZER_WOS
+// Unmap memory. Currently only used on Linux and WOS.
 void UnmapFromTo(uptr from, uptr to);
 #endif
 
