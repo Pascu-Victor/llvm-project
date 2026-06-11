@@ -18,6 +18,7 @@
 #include "asan_poisoning.h"
 #include "asan_report.h"
 #include "asan_stack.h"
+#include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 
 namespace __asan {
@@ -412,6 +413,70 @@ static bool AdjacentShadowValuesAreFullyPoisoned(u8 *s) {
   return s[-1] > 127 && s[1] > 127;
 }
 
+#if SANITIZER_WOS
+static const char *MaybeClassifyWosCleanStackReport(
+    const AddressDescription &addr_description, u32 reporting_tid,
+    u8 shadow_val) {
+  if (shadow_val != 0)
+    return nullptr;
+
+  const StackAddressDescription *stack = addr_description.AsStack();
+  if (stack == nullptr || stack->tid == reporting_tid)
+    return nullptr;
+
+  return "stack-use-after-return-or-cross-thread-stack-access";
+}
+
+static void MaybePrintWosCleanShadowHint(
+    const char *bug_descr, const AddressDescription &addr_description,
+    uptr addr, uptr access_size, u8 shadow_val, u32 reporting_tid) {
+  bool is_clean_shadow_stack_report =
+      internal_strcmp(bug_descr, "unknown-crash") == 0 ||
+      internal_strcmp(bug_descr,
+                      "stack-use-after-return-or-cross-thread-stack-access") ==
+          0;
+  if (shadow_val != 0 || !is_clean_shadow_stack_report || !AddrIsInMem(addr) ||
+      access_size == 0)
+    return;
+
+  uptr last = addr + access_size - 1;
+  u8 first_shadow = *(u8 *)MemToShadow(addr);
+  u8 last_shadow = 0;
+  bool last_in_mem = last >= addr && AddrIsInMem(last);
+  if (last_in_mem)
+    last_shadow = *(u8 *)MemToShadow(last);
+
+  if (last_in_mem) {
+    Report(
+        "NOTE: WOS ASAN: the reported address currently has addressable "
+        "shadow (first=0x%02x, last=0x%02x). Redzone-based classification "
+        "was unavailable; this can happen if a range/interceptor check "
+        "observes inconsistent or already-unpoisoned shadow while reporting.\n",
+        static_cast<unsigned>(first_shadow), static_cast<unsigned>(last_shadow));
+  } else {
+    Report(
+        "NOTE: WOS ASAN: the reported address currently has addressable "
+        "shadow (first=0x%02x, last=<outside ASAN memory>). Redzone-based "
+        "classification was unavailable; this can happen if a "
+        "range/interceptor check observes inconsistent or already-unpoisoned "
+        "shadow while reporting.\n",
+        static_cast<unsigned>(first_shadow));
+  }
+
+  const StackAddressDescription *stack = addr_description.AsStack();
+  if (stack != nullptr && stack->tid != reporting_tid) {
+    Report(
+        "NOTE: WOS ASAN: the access was reported by thread %s, but the "
+        "address belongs to stack memory owned by thread %s. The owning "
+        "thread may have already unpoisoned or reused that stack frame before "
+        "the report was printed; treat this as a stale/cross-thread stack "
+        "access unless proven otherwise.\n",
+        AsanThreadIdAndName(reporting_tid).c_str(),
+        AsanThreadIdAndName(stack->tid).c_str());
+  }
+}
+#endif
+
 ErrorGeneric::ErrorGeneric(u32 tid, uptr pc_, uptr bp_, uptr sp_, uptr addr,
                            bool is_write_, uptr access_size_)
     : ErrorBase(tid),
@@ -507,6 +572,16 @@ ErrorGeneric::ErrorGeneric(u32 tid, uptr pc_, uptr bp_, uptr sp_, uptr addr,
           far_from_bounds = AdjacentShadowValuesAreFullyPoisoned(shadow_addr);
           break;
       }
+#if SANITIZER_WOS
+      if (internal_strcmp(bug_descr, "unknown-crash") == 0) {
+        const char *wos_bug_descr =
+            MaybeClassifyWosCleanStackReport(addr_description, tid, shadow_val);
+        if (wos_bug_descr != nullptr) {
+          bug_descr = wos_bug_descr;
+          bug_type_score = 25;
+        }
+      }
+#endif
       scariness.Scare(bug_type_score + read_after_free_bonus, bug_descr);
       if (far_from_bounds) scariness.Scare(10, "far-from-bounds");
     }
@@ -663,6 +738,10 @@ void ErrorGeneric::Print() {
   // Pass bug_descr because we have a special case for
   // initialization-order-fiasco
   addr_description.Print(bug_descr);
+#if SANITIZER_WOS
+  MaybePrintWosCleanShadowHint(bug_descr, addr_description, addr, access_size,
+                               shadow_val, tid);
+#endif
   if (shadow_val == kAsanContiguousContainerOOBMagic)
     PrintContainerOverflowHint();
   ReportErrorSummary(bug_descr, &stack);

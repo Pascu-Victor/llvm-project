@@ -366,7 +366,17 @@ bool AsanThread::GetStackFrameAccessByAddr(uptr addr,
   }
 
   uptr *ptr = (uptr *)(mem_ptr + ASAN_SHADOW_GRANULARITY);
+#if SANITIZER_WOS
+  if (ptr[0] != kCurrentStackFrameMagic) {
+    VPrintf(1,
+            "AddressSanitizer: ignoring inconsistent WOS stack frame "
+            "descriptor for %p: magic=%p\n",
+            (void *)addr, (void *)ptr[0]);
+    return false;
+  }
+#else
   CHECK(ptr[0] == kCurrentStackFrameMagic);
+#endif
   access->offset = addr - (uptr)ptr;
   access->frame_pc = ptr[2];
   access->frame_descr = (const char *)ptr[1];

@@ -22,6 +22,7 @@
 #  include <pthread.h>
 #  include <sched.h>
 #  include <signal.h>
+#  include <stdint.h>
 #  include <sys/hcf.h>
 #  include <sys/mman.h>
 #  include <sys/multiproc.h>
@@ -47,6 +48,7 @@
 #  include "sanitizer_libc.h"
 #  include "sanitizer_mutex.h"
 #  include "sanitizer_placement_new.h"
+#  include "sanitizer_posix.h"
 #  include "sanitizer_procmaps.h"
 #  include "sanitizer_wos.h"
 
@@ -345,8 +347,15 @@ uptr internal_execve(const char* filename, char* const argv[],
 }
 
 void internal__exit(int exitcode) {
+  // WOS pthreads are represented as separate tasks.  The process EXIT syscall
+  // currently terminates the calling task, so a sanitizer report from a worker
+  // thread needs to wake and kill its siblings before exiting itself.
+  uptr pid = static_cast<uptr>(ker::process::getpid());
+  if (pid != 0)
+    ker::process::kill(static_cast<int64_t>(pid), SIGKILL);
   ker::process::exit(static_cast<uint64_t>(exitcode));
-  Die();
+  Trap();
+  __builtin_unreachable();
 }
 
 // ----------------- sanitizer_common.h
@@ -390,9 +399,41 @@ void InitTlsSize() {}
 
 uptr GetTlsSize() { return 0; }
 
+static bool GetThreadStackFromPthread(uptr* stack_top, uptr* stack_bottom) {
+  pthread_attr_t attr;
+  if (pthread_attr_init(&attr) != 0)
+    return false;
+
+  int result = pthread_getattr_np(pthread_self(), &attr);
+  if (result != 0) {
+    pthread_attr_destroy(&attr);
+    return false;
+  }
+
+  void* stack_addr = nullptr;
+  uptr stack_size = 0;
+  result = internal_pthread_attr_getstack(&attr, &stack_addr, &stack_size);
+  pthread_attr_destroy(&attr);
+  if (result != 0 || stack_addr == nullptr || stack_size == 0)
+    return false;
+
+  const uptr bottom = reinterpret_cast<uptr>(stack_addr);
+  const uptr top = bottom + stack_size;
+  const uptr marker = reinterpret_cast<uptr>(&result);
+  if (top <= bottom || marker < bottom || marker >= top)
+    return false;
+
+  *stack_top = top;
+  *stack_bottom = bottom;
+  return true;
+}
+
 void GetThreadStackTopAndBottom(bool at_initialization, uptr* stack_top,
                                 uptr* stack_bottom) {
-  (void)at_initialization;
+  if (!at_initialization &&
+      GetThreadStackFromPthread(stack_top, stack_bottom))
+    return;
+
   uptr marker = reinterpret_cast<uptr>(&marker);
   MemoryMappingLayout proc_maps(/*cache_enabled=*/true);
   MemoryMappedSegment segment;

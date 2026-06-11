@@ -114,7 +114,11 @@ void MemoryMappingLayout::DumpListOfModules(
   Reset();
   InternalMmapVector<char> module_name(kMaxPathLength);
   MemoryMappedSegment segment(module_name.data(), module_name.size());
+#  if SANITIZER_WOS
+  for (; Next(&segment);) {
+#  else
   for (uptr i = 0; Next(&segment); i++) {
+#  endif
     const char* cur_name = segment.filename;
     if (cur_name[0] == '\0')
       continue;
@@ -129,7 +133,14 @@ void MemoryMappingLayout::DumpListOfModules(
     //   mapped high at address space (in particular, higher than
     //   shadow memory of the tool), so the module can't be the
     //   first entry.
+#  if SANITIZER_WOS
+    // WOS can load ASAN PIEs as the first low mapping, so recover the module
+    // base from the executable-relative offset emitted by procfs.
+    uptr base_address =
+        segment.start >= segment.offset ? segment.start - segment.offset : 0;
+#  else
     uptr base_address = (i ? segment.start : 0) - segment.offset;
+#  endif
     LoadedModule cur_module;
     cur_module.set(cur_name, base_address);
     segment.AddAddressRanges(&cur_module);

@@ -261,11 +261,20 @@ uptr __asan_region_is_poisoned(uptr beg, uptr size) {
     return 0;
   // The fast check failed, so we have a poisoned byte somewhere.
   // Find it slowly.
+  uptr region_beg = beg;
   for (; beg < end; beg++)
     if (__asan::AddressIsPoisoned(beg))
       return beg;
+#if SANITIZER_WOS
+  VPrintf(1,
+          "AddressSanitizer: inconsistent WOS shadow for region [%p, %p); "
+          "treating it as unpoisoned\n",
+          (void *)region_beg, (void *)end);
+  return 0;
+#else
   UNREACHABLE("mem_is_zero returned false, but poisoned byte was not found");
   return 0;
+#endif
 }
 
 #define CHECK_SMALL_REGION(p, size, isWrite)                  \

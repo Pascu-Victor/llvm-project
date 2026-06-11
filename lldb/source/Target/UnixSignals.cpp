@@ -31,6 +31,7 @@ lldb::UnixSignalsSP UnixSignals::Create(const ArchSpec &arch) {
   const auto &triple = arch.GetTriple();
   switch (triple.getOS()) {
   case llvm::Triple::Linux:
+  case llvm::Triple::WOS:
     return std::make_shared<LinuxSignals>();
   case llvm::Triple::FreeBSD:
     return std::make_shared<FreeBSDSignals>();
