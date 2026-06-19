@@ -108,7 +108,7 @@ typedef uint_t uint;
 #endif
 
 #if defined(__NetBSD__) || defined(__DragonFly__) || defined(__GNU__) ||       \
-    defined(__MVS__)
+    defined(__MVS__) || defined(__WOS__)
 #define STATVFS_F_FLAG(vfs) (vfs).f_flag
 #else
 #define STATVFS_F_FLAG(vfs) (vfs).f_flags
@@ -127,7 +127,7 @@ const file_t kInvalidFile = -1;
     defined(__CYGWIN__) || defined(__DragonFly__) || defined(_AIX) ||          \
     defined(__GNU__) ||                                                        \
     (defined(__sun__) && defined(__svr4__) || defined(__HAIKU__)) ||           \
-    defined(__managarm__)
+    defined(__managarm__) || defined(__WOS__)
 static int test_dir(char ret[PATH_MAX], const char *dir, const char *bin) {
   struct stat sb;
   char fullpath[PATH_MAX];
@@ -282,7 +282,7 @@ std::string getMainExecutable(const char *argv0, void *MainAddr) {
   // Fall back to the classical detection.
   if (getprogpath(exe_path, argv0))
     return exe_path;
-#elif defined(__OpenBSD__) || defined(__HAIKU__)
+#elif defined(__OpenBSD__) || defined(__HAIKU__) || defined(__WOS__)
   char exe_path[PATH_MAX];
   // argv[0] only
   if (getprogpath(exe_path, argv0) != NULL)
@@ -554,6 +554,9 @@ static bool is_local_impl(struct STATVFS &Vfs) {
 #elif defined(__MVS__)
   // The file system can have an arbitrary structure on z/OS; must go with the
   // conservative answer.
+  return false;
+#elif defined(__WOS__)
+  // WOS statvfs does not currently expose a local/remote mount flag.
   return false;
 #else
   return !!(STATVFS_F_FLAG(Vfs) & MNT_LOCAL);

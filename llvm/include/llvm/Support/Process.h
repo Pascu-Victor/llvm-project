@@ -43,7 +43,11 @@ namespace sys {
 /// current executing process.
 class Process {
 public:
+#if defined(__WOS__)
+  using Pid = int64_t;
+#else
   using Pid = int32_t;
+#endif
 
   /// Get the process's identifier.
   LLVM_ABI static Pid getProcessId();
