@@ -31,8 +31,8 @@
 // Only one TU, one job, thus integrated-cc1 is enabled.
 // RUN: %clang -fintegrated-cc1 -fintegrated-as -c %s -### 2>&1 | FileCheck %s --check-prefix=YES
 
-// Only one TU, but we're linking, two jobs, thus integrated-cc1 is disabled.
-// RUN: %clang -fintegrated-cc1 %s -### 2>&1 | FileCheck %s --check-prefix=NO
+// Only one TU, plus a linker job, so the single cc1 can stay in-process.
+// RUN: %clang -fintegrated-cc1 %s -### 2>&1 | FileCheck %s --check-prefix=YES
 
 // RUN: echo 'int main() { return f() + g(); }' > %t1.cpp
 // RUN: echo 'int f() { return 1; }' > %t2.cpp

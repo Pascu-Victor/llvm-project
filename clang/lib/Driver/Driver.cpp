@@ -5367,9 +5367,25 @@ void Driver::BuildJobs(Compilation &C) const {
                        /*TargetDeviceOffloadKind*/ Action::OFK_None);
   }
 
-  // If we have more than one job, then disable integrated-cc1 for now. Do this
-  // also when we need to report process execution statistics.
-  if (C.getJobs().size() > 1 || CCPrintProcessStats)
+  // Keep at most one cc1/cc1as job in-process. External follow-up jobs such as
+  // the linker can safely consume the temporary output after the frontend
+  // returns, but multiple in-process frontend jobs still share too much driver
+  // state to run through this path.
+  bool HasInProcessJob = false;
+  bool DisableInProcessJobs = CCPrintProcessStats;
+  if (!DisableInProcessJobs) {
+    for (const auto &J : C.getJobs()) {
+      if (!J.InProcess)
+        continue;
+      if (HasInProcessJob) {
+        DisableInProcessJobs = true;
+        break;
+      }
+      HasInProcessJob = true;
+    }
+  }
+
+  if (DisableInProcessJobs)
     for (auto &J : C.getJobs())
       J.InProcess = false;
 
