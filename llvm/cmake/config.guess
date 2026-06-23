@@ -819,6 +819,9 @@ EOF
     *:SerenityOS:*:*)
 	echo ${UNAME_MACHINE}-pc-serenity
 	exit ;;
+    *:[Ww][Oo][Ss]:*:*)
+	echo ${UNAME_MACHINE}-pc-wos
+	exit ;;
     *:Interix*:*)
 	case ${UNAME_MACHINE} in
 	    x86)
